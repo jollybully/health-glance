@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.HealthGlance" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#0C1218</item>
+        <item name="android:navigationBarColor">#0C1218</item>
+        <item name="android:windowBackground">#0C1218</item>
+    </style>
+</resources>

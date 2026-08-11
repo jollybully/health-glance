@@ -1,0 +1,9 @@
+# Copy to .dev.vars for local wrangler dev
+PEBBLE_API_KEY=dev-local-secret-change-me
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+USE_MOCK=true
+STEP_GOAL=10000
+# Must exactly match an Authorized redirect URI on the Google OAuth client.
+# Prefer https://<your-worker>.workers.dev/oauth/callback if Google rejects http.
+OAUTH_REDIRECT_URI=http://localhost:8787/oauth/callback

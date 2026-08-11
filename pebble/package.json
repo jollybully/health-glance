@@ -1,0 +1,78 @@
+{
+  "name": "health-glance",
+  "author": "Elliot",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Health Glance",
+    "uuid": "ced3f81d-aaae-4ee4-a49c-885a247644ec",
+    "projectType": "moddable",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "companionApp": {
+      "android": {
+        "apps": [
+          {
+            "package": "com.elliotseeds.healthglance"
+          }
+        ]
+      }
+    },
+    "messageKeys": [
+      "STATS_REQ",
+      "STATS_JSON",
+      "STATS_ERR",
+      "STATS_URL",
+      "STEPS",
+      "STEP_GOAL",
+      "DIST_M",
+      "CALORIES",
+      "ACTIVE_MIN",
+      "RESTING_HR",
+      "SLEEP_MIN",
+      "DEEP",
+      "LIGHT",
+      "REM",
+      "AWAKE",
+      "SOURCE",
+      "UPDATED",
+      "SLEEP_START",
+      "SLEEP_END",
+      "HR_MIN",
+      "HR_MAX",
+      "ZONE_LOW",
+      "ZONE_MID",
+      "ZONE_HIGH",
+      "STEPS_WEEK",
+      "SLEEP_WEEK",
+      "STEPS_HOUR",
+      "WO_DUR_S",
+      "WO_CAL",
+      "WO_AVG_HR",
+      "WO_PEAK_HR",
+      "WO_DIST_M",
+      "WO_START",
+      "WO_END",
+      "WO_TITLE",
+      "WO_ZONE_LOW",
+      "WO_ZONE_MID",
+      "WO_ZONE_HIGH",
+      "FLOORS",
+      "SPO2",
+      "HRV_MS"
+    ],
+    "resources": {
+      "media": []
+    }
+  }
+}
