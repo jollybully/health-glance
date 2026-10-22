@@ -107,6 +107,7 @@ def main():
         if os.path.exists(path):
             os.remove(path)
         ok = screendump(sock, path)
+        time.sleep(0.02)  # let qemu refresh the surface between dumps
         ts = (time.time() - t0) * 1000
         if ok:
             caps, seam = classify(path)

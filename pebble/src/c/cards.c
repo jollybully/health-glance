@@ -10,6 +10,12 @@
 #define CUE_Y 202
 #define STEP_GOAL 10000
 
+/* 0..1000 reveal progress applied to bars, stage segments, the HR marker and
+ * the active pip. At rest it is 1000, so the settled card is pixel-identical. */
+static int s_reveal_pm = 1000;
+static Animation *s_reveal;
+static Layer *s_reveal_target;
+
 static GFont s_f_title;
 static GFont s_f_body;
 
@@ -88,10 +94,13 @@ static void hero_str(char *b, size_t n, int card) {
 
 /* ---------------- chrome ---------------- */
 
+static int scale(int value, int pm) { return (int)(((int64_t)value * pm) / 1000); }
+
 static void draw_pips(GContext *ctx, int w, int card) {
   int x = w - 10 - 34;
   for (int i = 0; i < 4; i++) {
-    int s = (i == card) ? 7 : 5;
+    /* the active pip blooms 5px -> 7px with the reveal */
+    int s = (i == card) ? 5 + scale(2, s_reveal_pm) : 5;
     fill(ctx, (i == card) ? GColorWhite : CAP_DIM[card], GRect(x, 18 - s, s, s));
     x += s + 4;
   }
@@ -110,8 +119,9 @@ static void draw_parts(GContext *ctx, int y, int w, const int v[4], const GColor
     if (v[i] <= 0) continue;
     int pw = (v[i] * bw) / total;
     if (pw < 2) pw = 2;
-    fill(ctx, c[i], GRect(x, y, pw, BAR_H));
-    x += pw;
+    int shown = scale(pw, s_reveal_pm);
+    if (shown > 0) fill(ctx, c[i], GRect(x, y, shown, BAR_H));
+    x += shown;
   }
 }
 
@@ -181,6 +191,7 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
     fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, bw, BAR_H));
     int pct = g_stats.steps > 0 ? (g_stats.steps * bw) / STEP_GOAL : 0;
     if (pct > bw) pct = bw;
+    pct = scale(pct, s_reveal_pm);
     if (pct > 0) fill(ctx, GColorJaegerGreen, GRect(X_INSET, BAR_Y, pct, BAR_H));
     if (g_stats.dist_m > 0) {
       f_tenths(tmp1, sizeof(tmp1), g_stats.dist_m / 100);
@@ -206,6 +217,8 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
                                (g_stats.hr_max - g_stats.hr_min);
       if (dot < X_INSET) dot = X_INSET;
       if (dot > X_INSET + bw) dot = X_INSET + bw;
+      /* slides out from the left edge as the card settles */
+      dot = X_INSET + scale(dot - X_INSET, s_reveal_pm);
       fill(ctx, GColorImperialPurple, GRect(dot - 7, BAR_Y - 3, 14, 14));
     }
     f_dash(tmp1, sizeof(tmp1), g_stats.hr_min);
@@ -218,7 +231,8 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
       int v[4] = {g_stats.wo_lo, g_stats.wo_mid, g_stats.wo_hi, 0};
       draw_parts(ctx, BAR_Y, w, v, ZONE);
     } else {
-      fill(ctx, GColorOrange, GRect(X_INSET, BAR_Y, bw, BAR_H));
+      int full = scale(bw, s_reveal_pm);
+      if (full > 0) fill(ctx, GColorOrange, GRect(X_INSET, BAR_Y, full, BAR_H));
     }
     f_tenths(tmp1, sizeof(tmp1), g_stats.wo_dist / 100);
     f_dash(tmp2, sizeof(tmp2), g_stats.wo_avg);
@@ -235,4 +249,47 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
     fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, bw, BAR_H));
     text(ctx, "No workout", s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
   }
+}
+
+/* ---------------- reveal animation ---------------- */
+
+static void reveal_update(Animation *animation, const AnimationProgress progress) {
+  (void)animation;
+  s_reveal_pm = (int)(((int64_t)progress * 1000) / ANIMATION_NORMALIZED_MAX);
+  if (s_reveal_target) layer_mark_dirty(s_reveal_target);
+}
+
+static void reveal_stopped(Animation *animation, bool finished, void *context) {
+  (void)animation;
+  (void)finished;
+  (void)context;
+  s_reveal = NULL;
+  s_reveal_pm = 1000;
+  if (s_reveal_target) layer_mark_dirty(s_reveal_target);
+}
+
+void cards_reveal(Layer *target) {
+  cards_cancel_reveal();
+  s_reveal_target = target;
+  s_reveal_pm = 0;
+  static const AnimationImplementation impl = {.update = reveal_update};
+  s_reveal = animation_create();
+  if (!s_reveal) {
+    s_reveal_pm = 1000;
+    return;
+  }
+  animation_set_implementation(s_reveal, &impl);
+  animation_set_duration(s_reveal, 260); /* outlives the 175ms push, so it lands filled */
+  animation_set_curve(s_reveal, AnimationCurveEaseOut);
+  animation_set_handlers(s_reveal, (AnimationHandlers){.stopped = reveal_stopped}, NULL);
+  animation_schedule(s_reveal);
+}
+
+void cards_cancel_reveal(void) {
+  if (s_reveal) {
+    animation_unschedule(s_reveal);
+    s_reveal = NULL;
+  }
+  s_reveal_target = NULL;
+  s_reveal_pm = 1000;
 }

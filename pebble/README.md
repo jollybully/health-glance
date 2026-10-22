@@ -57,7 +57,22 @@ Deck: Steps → Sleep → Heart → Workout.
 
 ## Animation
 
-Full Deck Push + Seam: two full-screen `Layer`s whose `update_proc` paints card *n* from `g_stats`. On a page turn the incoming layer starts fully off-screen and both slide inside one `PropertyAnimation` (170 ms, ease-in-out), with a 4 px black seam layer riding the join. Nothing is snapshotted per frame — the layers composite.
+Full Deck Push + Seam in two stages, so it lands like a PebbleOS transition instead of stopping
+dead: **130 ms `EaseOut`** to 8 px *past* the resting position, then a **75 ms `EaseInOut`**
+settle back onto it. Two full-screen `Layer`s paint card *n* from `g_stats`; a 4 px black seam
+layer rides the join (off-screen at both ends of the travel). Nothing is snapshotted per frame —
+the layers composite.
+
+Content fills in as the card arrives rather than after it lands: `cards_reveal()` animates a
+0..1000 progress for 260 ms (EaseOut), which grows the step/sleep/zone bars and the HR marker
+out from the left edge and blooms the active pip 5 px → 7 px. At rest the progress is 1000, so
+the settled card is pixel-identical to the Alloy build.
+
+One short vibration per page turn (`HG_VIBE_ON_PAGING`, set 0 in `main.c` to silence).
+
+> A custom easing curve would express the overshoot in one animation, but
+> `animation_set_custom_curve()` with a curve that returns more than `ANIMATION_NORMALIZED_MAX`
+> kills the app on SDK 4.17 — hence two chained animations with stock curves.
 
 ## Layout
 
