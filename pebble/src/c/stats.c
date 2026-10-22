@@ -4,11 +4,6 @@
 Stats g_stats;
 LiveHr g_live;
 
-static void set_clock(char *dst, const char *src) {
-  strncpy(dst, src, ST_LEN - 1);
-  dst[ST_LEN - 1] = '\0';
-}
-
 #define CACHE_KEY 1u
 #define SERIES_KEY 2u
 #define CACHE_MAGIC 0x48475331u /* "HGS1" */
@@ -168,9 +163,9 @@ void stats_init(void) {
   g_stats.light = 210;
   g_stats.rem = 95;
   g_stats.awake = 18;
-  set_clock(g_stats.sleep_start, "23:12");
-  set_clock(g_stats.sleep_end, "06:45");
-  set_clock(g_stats.updated, "10:04");
+  snprintf(g_stats.sleep_start, sizeof(g_stats.sleep_start), "23:12");
+  snprintf(g_stats.sleep_end, sizeof(g_stats.sleep_end), "06:45");
+  snprintf(g_stats.updated, sizeof(g_stats.updated), "10:04");
   g_stats.hr_min = 52;
   g_stats.hr_max = 148;
   g_stats.has_workout = true;

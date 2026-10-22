@@ -58,6 +58,7 @@ static int s_day;        /* 0 today, 1 yesterday ... */
 static bool s_live;      /* heart screen showing the strap instead of the graph */
 static bool s_no_live_hint; /* user asked for live while nothing was streaming */
 static bool s_dirty;     /* series changed since the last flash write */
+static void clear_series_for(int card);
 static int s_waiting_day = -1; /* day asked of the phone, -1 = none */
 static void (*s_request_day)(int day);
 static bool s_any;       /* any series has arrived at all */
@@ -149,6 +150,17 @@ static void draw_steps(GContext *ctx) {
   else snprintf(ctxw, sizeof ctxw, "%d days ago", s_day);
   frame(ctx, CARD_D_STEPS, ctxw);
 
+  const bool past = s_day > 0;
+  if (past && peak <= 0) {
+    /* We have nothing for that day. Showing today's numbers under a "2 days ago"
+     * header is how data stops being trustworthy, so say nothing instead. */
+    cards_hero_text(ctx, "", HERO_Y);
+    label_left(ctx, "no data", GColorDarkGray, UNIT_Y);
+    label_right(ctx, detail_day_pending() ? "loading" : "", GColorDarkGray, UNIT_Y);
+    label_full(ctx, "phone sent nothing", GColorBlack, META_Y);
+    cue(ctx);
+    return;
+  }
   if (peak > 0) {
     snprintf(a, sizeof a, "%d", peak * 100); /* series is steps/100 per hour */
     cards_hero_text(ctx, a, HERO_Y);
@@ -182,9 +194,30 @@ static void draw_sleep(GContext *ctx) {
   else if (s_day == 1) snprintf(ctxs, sizeof ctxs, "night before");
   else snprintf(ctxs, sizeof ctxs, "%d nights ago", s_day);
   frame(ctx, CARD_D_SLEEP, ctxs);
-  snprintf(a, sizeof a, "%d", g_stats.deep);
-  cards_hero_text(ctx, a, HERO_Y);
-  label_left(ctx, "deep sleep", GColorDarkGray, UNIT_Y);
+  const bool past = s_day > 0;
+  bool any_stage = false;
+  if (s_has_series[CARD_D_SLEEP]) {
+    for (int i = 0; i < SERIES_SLOTS; i++) {
+      if (s_series[CARD_D_SLEEP][i] != 0) any_stage = true;
+    }
+  }
+  if (past && !any_stage) {
+    cards_hero_text(ctx, "", HERO_Y);
+    label_left(ctx, "no data", GColorDarkGray, UNIT_Y);
+    label_right(ctx, detail_day_pending() ? "loading" : "", GColorDarkGray, UNIT_Y);
+    label_full(ctx, "phone sent nothing", GColorBlack, META_Y);
+    cue(ctx);
+    return;
+  }
+  if (past) {
+    /* deep/rem totals are only known for the last night, so do not imply them */
+    cards_hero_text(ctx, "", HERO_Y);
+    label_left(ctx, "sleep stages", GColorDarkGray, UNIT_Y);
+  } else {
+    snprintf(a, sizeof a, "%d", g_stats.deep);
+    cards_hero_text(ctx, a, HERO_Y);
+    label_left(ctx, "deep sleep", GColorDarkGray, UNIT_Y);
+  }
 
   if (s_has_series[CARD_D_SLEEP]) {
     for (int i = 0; i < SERIES_SLOTS; i++) {
@@ -207,10 +240,14 @@ static void draw_sleep(GContext *ctx) {
     label_right(ctx, "no series", GColorDarkGray, UNIT_Y);
   }
 
-  stats_clock_to(t1, sizeof(t1), g_stats.sleep_start);
-  stats_clock_to(t2, sizeof(t2), g_stats.sleep_end);
-  snprintf(a, sizeof a, "%s-%s · %d:%02d rem", t1, t2, g_stats.rem / 60, g_stats.rem % 60);
-  label_full(ctx, a, GColorBlack, META_Y);
+  if (!past) {
+    stats_clock_to(t1, sizeof(t1), g_stats.sleep_start);
+    stats_clock_to(t2, sizeof(t2), g_stats.sleep_end);
+    snprintf(a, sizeof a, "%s-%s · %d:%02d rem", t1, t2, g_stats.rem / 60, g_stats.rem % 60);
+    label_full(ctx, a, GColorBlack, META_Y);
+  } else {
+    label_full(ctx, "stage timeline", GColorBlack, META_Y);
+  }
   cue(ctx);
 }
 
@@ -312,9 +349,6 @@ static void wo_entry(int i, int *secs, int *dist_x10, int *avg, int *days) {
   *days = s_wo[o + 4];
   /* byte 5 reserved */
 }
-
-/* Which weekly column a session belongs to: 0 = six days ago, 6 = today. */
-static int wo_column(int days) { return 6 - (days < 0 ? 0 : (days > 6 ? 6 : days)); }
 
 static const char *wo_name(int i) {
   /* Unknown types must not claim to be a sport he did not do. */
@@ -499,6 +533,7 @@ bool detail_up(void) {
     if (s_day < 29 && s_request_day) {
       s_day++;
       s_waiting_day = s_day;
+      clear_series_for(s_card); /* never show the old day's chart */
       layer_mark_dirty(s_layer);
       s_request_day(s_day);
     }
@@ -527,6 +562,12 @@ bool detail_down(void) {
     if (s_day > 0 && s_request_day) {
       s_day--;
       s_waiting_day = s_day;
+      if (s_day == 0) {
+        /* today's charts we already hold stay valid */
+        s_waiting_day = -1;
+      } else {
+        clear_series_for(s_card);
+      }
       layer_mark_dirty(s_layer);
       s_request_day(s_day);
     }
@@ -577,6 +618,15 @@ void detail_set_day(int day_offset) {
 void detail_set_request_day(void (*fn)(int day)) { s_request_day = fn; }
 
 bool detail_day_pending(void) { return s_waiting_day >= 0 && s_waiting_day == s_day; }
+
+/* Drop the charts we are leaving behind. Without this, cycling to a day with no
+ * data kept showing the PREVIOUS day's chart under the new day's header, which is
+ * worse than showing nothing: the numbers look real and are for the wrong day. */
+static void clear_series_for(int card) {
+  if (card < 0 || card > 3) return;
+  memset(s_series[card], 0, SERIES_SLOTS);
+  s_has_series[card] = false;
+}
 
 /* ---------------- persistence ---------------- */
 

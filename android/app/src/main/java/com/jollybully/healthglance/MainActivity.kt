@@ -246,33 +246,10 @@ fun CompanionScreen(
                 Text(if (busy) "Syncing…" else "Sync & push to watch")
             }
 
-            if (BuildConfig.DEBUG) {
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            busy = true
-                            status = "Seeding…"
-                            try {
-                                if (!hasWrite) {
-                                    status = "Need write permissions to seed"
-                                    busy = false
-                                    return@launch
-                                }
-                                repository.seedSampleData()
-                                status = "Seeded sample data"
-                                refreshNow()
-                            } catch (e: Exception) {
-                                status = e.message ?: "Seed failed"
-                                busy = false
-                            }
-                        }
-                    },
-                    enabled = availability is HealthConnectAvailability.Available && !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Seed emulator sample data")
-                }
-            }
+                        /* The seed control is deliberately absent: it writes fabricated records
+             * into Health Connect with real timestamps, so a workout history would
+             * report sessions that never happened. seedSampleData() remains in the
+             * repository for tests only. */
 
             Box(modifier = Modifier.height(8.dp))
 
