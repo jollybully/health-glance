@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -51,15 +52,32 @@ class HeartRateService : Service(), HeartRateClient.Listener {
 
         fun start(context: Context) {
             val intent = Intent(context, HeartRateService::class.java).setAction(ACTION_START)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                /* e.g. ForegroundServiceStartNotAllowedException from the background */
+                Log.e(TAG, "could not start the live HR service", e)
+                LiveHr.set(
+                    LiveHr.Snapshot(
+                        state = LiveHr.State.Failed,
+                        detail = "Could not start: ${e.javaClass.simpleName}",
+                    ),
+                )
             }
         }
 
         fun stop(context: Context) {
-            context.startService(Intent(context, HeartRateService::class.java).setAction(ACTION_STOP))
+            try {
+                context.startService(
+                    Intent(context, HeartRateService::class.java).setAction(ACTION_STOP),
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "could not stop the live HR service", e)
+            }
         }
     }
 
@@ -68,6 +86,7 @@ class HeartRateService : Service(), HeartRateClient.Listener {
     private var sender: PebbleStatsSender = PebbleKitStatsSender(this)
     private var publishJob: Job? = null
     private var reconnectJob: Job? = null
+    private var inForeground = false
 
     private val window = ArrayDeque<Int>()
     private var lastPublishedBpm = 0
@@ -81,7 +100,11 @@ class HeartRateService : Service(), HeartRateClient.Listener {
 
     override fun onCreate() {
         super.onCreate()
-        createChannel()
+        try {
+            createChannel()
+        } catch (e: Exception) {
+            Log.e(TAG, "notification channel failed", e)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -91,17 +114,73 @@ class HeartRateService : Service(), HeartRateClient.Listener {
                 return START_NOT_STICKY
             }
             else -> {
-                startForeground(NOTIFICATION_ID, buildNotification(0, LiveHr.State.Connecting))
+                if (!enterForeground()) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 if (client == null) connect()
                 return START_STICKY
             }
         }
     }
 
+    /** Android kills the process if a foreground service has no notification, so a
+     *  failure to build one is reported rather than allowed to crash. */
+    private fun enterForeground(): Boolean {
+        if (inForeground) {
+            updateNotification()
+            return true
+        }
+        return try {
+            val notification = buildNotification(0, LiveHr.State.Connecting)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            inForeground = true
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed", e)
+            snapshot = snapshot.copy(
+                state = LiveHr.State.Failed,
+                detail = "Notification failed: ${e.javaClass.simpleName}",
+            )
+            LiveHr.set(snapshot)
+            false
+        }
+    }
+
     private fun connect() {
         reconnectJob?.cancel()
         window.clear()
-        client = HeartRateClient(this, this).also { it.start() }
+        try {
+            client = HeartRateClient(this, this).also { it.start() }
+        } catch (e: SecurityException) {
+            /* BLE permission revoked or never granted: the likeliest user-facing
+             * failure, and it used to take the whole app down. */
+            Log.e(TAG, "BLE permission missing", e)
+            client = null
+            snapshot = snapshot.copy(
+                state = LiveHr.State.Failed,
+                detail = "Bluetooth permission needed",
+            )
+            LiveHr.set(snapshot)
+            updateNotification()
+        } catch (e: Exception) {
+            Log.e(TAG, "could not start the BLE client", e)
+            client = null
+            snapshot = snapshot.copy(
+                state = LiveHr.State.Failed,
+                detail = "Bluetooth: ${e.message ?: e.javaClass.simpleName}",
+            )
+            LiveHr.set(snapshot)
+            updateNotification()
+        }
     }
 
     private fun stopEverything(detail: String) {
@@ -118,6 +197,7 @@ class HeartRateService : Service(), HeartRateClient.Listener {
             @Suppress("DEPRECATION")
             stopForeground(true)
         }
+        inForeground = false
         stopSelf()
     }
 
@@ -181,7 +261,7 @@ class HeartRateService : Service(), HeartRateClient.Listener {
     }
 
     override fun onDropped(reason: String) {
-        client?.stop()
+        client?.let { runCatching { it.stop() } }
         client = null
         snapshot = snapshot.copy(state = LiveHr.State.Retry, detail = reason)
         LiveHr.set(snapshot)
@@ -206,7 +286,12 @@ class HeartRateService : Service(), HeartRateClient.Listener {
         if (snapshot.bpm <= 0 && !force) return
         lastPublishedBpm = snapshot.bpm
         lastPublishAt = System.currentTimeMillis()
-        val outcome = sender.sendLiveHr(snapshot.copy(publishedAtMillis = lastPublishAt))
+        val outcome = try {
+            sender.sendLiveHr(snapshot.copy(publishedAtMillis = lastPublishAt))
+        } catch (e: Exception) {
+            Log.w(TAG, "live hr push failed", e)
+            null
+        }
         Log.i(TAG, "live hr bpm=${snapshot.bpm} state=${snapshot.state} outcome=$outcome")
         updateNotification()
     }
@@ -245,10 +330,14 @@ class HeartRateService : Service(), HeartRateClient.Listener {
             LiveHr.State.Streaming -> if (bpm > 0) "$bpm bpm · min ${sessionMin} · max ${sessionMax}" else "Waiting for a pulse"
             LiveHr.State.Retry -> "Reconnecting to the strap"
             LiveHr.State.Scanning -> "Looking for a heart-rate strap"
+            LiveHr.State.Failed -> snapshot.detail.ifBlank { "Failed" }
             else -> "Connecting to the strap"
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher)
+            /* A plain drawable, NOT the launcher's adaptive icon: setSmallIcon
+             * with a non-bitmap adaptive icon throws and takes the app down the
+             * moment the foreground notification is built. */
+            .setSmallIcon(R.drawable.ic_stat_hr)
             .setContentTitle("Live heart rate")
             .setContentText(text)
             .setOngoing(true)
@@ -259,12 +348,17 @@ class HeartRateService : Service(), HeartRateClient.Listener {
     }
 
     private fun updateNotification() {
-        val manager = getSystemService(NotificationManager::class.java) ?: return
-        manager.notify(NOTIFICATION_ID, buildNotification(snapshot.bpm, snapshot.state))
+        if (!inForeground) return
+        try {
+            val manager = getSystemService(NotificationManager::class.java) ?: return
+            manager.notify(NOTIFICATION_ID, buildNotification(snapshot.bpm, snapshot.state))
+        } catch (e: Exception) {
+            Log.w(TAG, "notification update failed", e)
+        }
     }
 
     override fun onDestroy() {
-        client?.stop()
+        client?.let { runCatching { it.stop() } }
         client = null
         scope.cancel()
         LiveHr.reset("Service stopped")

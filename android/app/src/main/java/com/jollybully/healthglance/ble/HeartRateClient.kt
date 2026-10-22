@@ -79,8 +79,27 @@ class HeartRateClient(
         else -> arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
     }
 
+    /** Any BLE call can throw SecurityException or IllegalStateException; the
+     *  service must show a state, never die. */
+    private fun drop(reason: String) {
+        stopped = true
+        runCatching { handler.removeCallbacksAndMessages(null) }
+        listener.onDropped(reason)
+    }
+
     @SuppressLint("MissingPermission")
     fun start() {
+        try {
+            startInner()
+        } catch (e: SecurityException) {
+            drop("Bluetooth permission needed")
+        } catch (e: Exception) {
+            drop("Bluetooth: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startInner() {
         stopped = false
         val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
         if (adapter == null || !adapter.isEnabled) {
@@ -118,7 +137,13 @@ class HeartRateClient(
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
         scanning = true
-        scanner.startScan(filters, settings, scanCallback)
+        try {
+            scanner.startScan(filters, settings, scanCallback)
+        } catch (e: Exception) {
+            scanning = false
+            drop("Scan failed: ${e.message ?: e.javaClass.simpleName}")
+            return
+        }
         handler.postDelayed({
             if (scanning) {
                 stopScan(adapter)
@@ -143,11 +168,24 @@ class HeartRateClient(
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             if (stopped || gatt != null) return
             val device = result.device ?: return
+            if (result.scanRecord != null &&
+                !result.scanRecord!!.serviceUuids.orEmpty().contains(android.os.ParcelUuid(HEART_RATE_SERVICE)) &&
+                result.scanRecord!!.serviceUuids != null
+            ) {
+                /* Advertises services, but not the heart-rate one: skip it rather
+                 * than connecting to a device that cannot stream. */
+                return
+            }
             val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
             if (adapter != null) stopScan(adapter)
             prefs.edit().putString(PREF_ADDRESS, device.address).apply()
             listener.onConnecting(device.name ?: device.address)
-            gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+            gatt = try {
+                device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+            } catch (e: Exception) {
+                drop("Connect failed: ${e.message ?: e.javaClass.simpleName}")
+                null
+            }
         }
 
         override fun onScanFailed(errorCode: Int) {
