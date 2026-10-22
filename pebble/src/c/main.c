@@ -13,7 +13,7 @@ static Layer *s_seam;
 static int s_front;   /* index of the visible card layer */
 static int s_card_idx; /* card currently shown */
 static int s_w, s_h;
-static bool s_asked;
+static bool s_loaded; /* an inbox push has filled the stats */
 
 /* ---------------- card layers ---------------- */
 
@@ -56,7 +56,7 @@ static void push(int to, int dir) {
   layer_set_frame(lo, GRect(0, 0, s_w, s_h));
   layer_set_hidden(lo, false);
 
-  layer_set_frame(s_seam, GRect(0, dir > 0 ? s_h - 4 : -4, s_w, 4));
+  layer_set_frame(s_seam, GRect(0, dir > 0 ? s_h : -4, s_w, 4));
   layer_set_hidden(s_seam, false);
 
   anim_push(li, lo, s_seam, dir, s_w, s_h, push_done, NULL);
@@ -67,7 +67,7 @@ static void push(int to, int dir) {
 static void up_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  if (s_card_idx < CARD_COUNT - 1) push(s_card_idx + 1, 1);
+  if (s_card_idx < CARD_COUNT - 1) push(s_card_idx + 1, -1); /* next card enters from the top */
 }
 
 static void down_click(ClickRecognizerRef r, void *ctx) {
@@ -78,7 +78,7 @@ static void down_click(ClickRecognizerRef r, void *ctx) {
     window_stack_pop_all(true); /* Down on Steps exits to the watchface */
     return;
   }
-  push(s_card_idx - 1, -1);
+  push(s_card_idx - 1, 1); /* previous card enters from the bottom */
 }
 
 static void back_click(ClickRecognizerRef r, void *ctx) {
@@ -98,29 +98,80 @@ static void click_config(void *ctx) {
 
 /* ---------------- AppMessage ---------------- */
 
+/* Phone also pushes on its own onAppOpened, but keep asking until data lands:
+ * one lost request must not leave the watch empty for half an hour. */
+static AppTimer *s_req_timer;
+static int s_tries;
+/* Escalating, not machine-gun: every STATS_REQ makes the phone re-read Health
+ * Connect, so six asks spread over ~25s is the budget. */
+static const int REQ_DELAYS_MS[] = {400, 800, 1500, 3000, 6000, 12000};
+#define REQ_MAX_TRIES ((int)(sizeof(REQ_DELAYS_MS) / sizeof(REQ_DELAYS_MS[0])))
+
+static void req_timer(void *data);
+
 static void send_req(void) {
 #if HG_DEMO
   return;
 #else
-  if (s_asked) return;
+  if (s_loaded) return;
   DictionaryIterator *it;
-  if (app_message_outbox_begin(&it) != APP_MSG_OK) return;
-  dict_write_int32(it, MESSAGE_KEY_STATS_REQ, 1);
-  if (app_message_outbox_send() == APP_MSG_OK) s_asked = true;
+  AppMessageResult result = app_message_outbox_begin(&it);
+  if (result == APP_MSG_OK) {
+    dict_write_int32(it, MESSAGE_KEY_STATS_REQ, 1);
+    result = app_message_outbox_send();
+  }
+  if (result == APP_MSG_OK) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "STATS_REQ sent (try %d)", s_tries + 1);
+  } else {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "STATS_REQ not sent: %d", (int)result);
+  }
+  /* "Sent" is not "answered": keep asking until an inbox push fills the
+   * stats, otherwise one lost request leaves the deck empty for half an hour. */
+  int delay = REQ_DELAYS_MS[s_tries < REQ_MAX_TRIES ? s_tries : REQ_MAX_TRIES - 1];
+  s_tries++;
+  if (s_tries < REQ_MAX_TRIES) {
+    if (s_req_timer) app_timer_cancel(s_req_timer);
+    s_req_timer = app_timer_register(delay, req_timer, NULL);
+  } else {
+    /* Say so instead of sitting on "Waiting for phone" forever. */
+    strncpy(g_stats.status, "phone not replying", ST_LEN - 1);
+    g_stats.status[ST_LEN - 1] = '\0';
+    layer_mark_dirty(s_card[s_front]);
+  }
 #endif
 }
 
 static void req_timer(void *data) {
   (void)data;
+  s_req_timer = NULL;
   send_req();
+}
+
+static void start_req_loop(void) {
+  s_tries = 0;
+  if (s_req_timer) app_timer_cancel(s_req_timer);
+  s_req_timer = app_timer_register(400, req_timer, NULL);
 }
 
 static void outbox_failed(DictionaryIterator *it, AppMessageResult reason, void *ctx) {
   (void)it;
   (void)ctx;
-  APP_LOG(APP_LOG_LEVEL_WARNING, "stats req failed: %d", (int)reason);
-  s_asked = false;
-  app_timer_register(1000, req_timer, NULL);
+  APP_LOG(APP_LOG_LEVEL_WARNING, "outbox failed: %d", (int)reason);
+}
+
+/* The Kotlin companion writes every number as PebbleDictionaryItem.UInt32, so
+ * tuples arrive as TUPLE_UINT; some older paths used TUPLE_INT. Accept both. */
+static int32_t tuple_int(Tuple *t) {
+  if (t->type == TUPLE_INT) return (int32_t)t->value->int32;
+  if (t->type == TUPLE_UINT) {
+    switch (t->length) {
+      case 1: return (int32_t)t->value->uint8;
+      case 2: return (int32_t)t->value->uint16;
+      case 4: return (int32_t)t->value->uint32;
+      default: return 0;
+    }
+  }
+  return 0;
 }
 
 static void copy_str(char *dst, Tuple *t) {
@@ -146,7 +197,7 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
   for (Tuple *t = dict_read_first(it); t; t = dict_read_next(it)) {
     /* Keys arrive as uint32_t externs from message_keys.auto.h, so no switch. */
     uint32_t k = t->key;
-    int32_t iv = (t->type == TUPLE_INT) ? t->value->int32 : 0;
+    int32_t iv = tuple_int(t);
 
     if (k == MESSAGE_KEY_STEPS) {
       s->steps = iv;
@@ -217,8 +268,15 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
     s->wo_title[j] = '\0';
   }
 
+  APP_LOG(APP_LOG_LEVEL_INFO, "inbox root=%d wo=%d steps=%d", (int)got_root, (int)got_wo,
+          s->steps);
   if (got_wo) s->has_workout = true;
   if (got_root || got_wo) {
+    s_loaded = true;
+    if (s_req_timer) {
+      app_timer_cancel(s_req_timer);
+      s_req_timer = NULL;
+    }
     strncpy(s->status, "Live", ST_LEN - 1);
     s->status[ST_LEN - 1] = '\0';
     layer_mark_dirty(s_card[s_front]);
@@ -253,7 +311,15 @@ static void window_load(Window *w) {
 
 static void window_appear(Window *w) {
   (void)w;
-  app_timer_register(400, req_timer, NULL);
+  start_req_loop();
+}
+
+static void window_disappear(Window *w) {
+  (void)w;
+  if (s_req_timer) {
+    app_timer_cancel(s_req_timer);
+    s_req_timer = NULL;
+  }
 }
 
 static void window_unload(Window *w) {
@@ -273,7 +339,9 @@ static void init(void) {
   app_message_register_inbox_received(inbox_received);
   app_message_register_inbox_dropped(inbox_dropped);
   app_message_register_outbox_failed(outbox_failed);
-  app_message_open(512, 64);
+  /* The Moddable runtime always opened the maximum, so the old Alloy build never
+   * actually ran with 512 bytes; a full companion push can exceed that. */
+  app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
 
   s_window = window_create();
   window_set_background_color(s_window, GColorWhite);
@@ -281,12 +349,17 @@ static void init(void) {
   window_set_window_handlers(s_window, (WindowHandlers){
                                            .load = window_load,
                                            .appear = window_appear,
+                                           .disappear = window_disappear,
                                            .unload = window_unload,
                                        });
   window_stack_push(s_window, true);
 }
 
 static void deinit(void) {
+  if (s_req_timer) {
+    app_timer_cancel(s_req_timer);
+    s_req_timer = NULL;
+  }
   window_destroy(s_window);
 }
 

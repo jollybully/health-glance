@@ -29,9 +29,11 @@ static void on_stopped(Animation *a, bool finished, void *ctx) {
   (void)a;
   (void)finished;
   (void)ctx;
-  /* Siblings run the same duration; drop them so frames can be reset cleanly. */
-  if (s_push.out) animation_unschedule(s_push.out);
-  if (s_push.seam) animation_unschedule(s_push.seam);
+  /* Do NOT unschedule the siblings here: Pebble animations auto-destroy when
+   * they stop, so by the time this runs their pointers may already be freed
+   * and touching them corrupts state (it left anim_busy() stuck true, which
+   * silently swallowed every later button press). They share our duration and
+   * are hidden+reset below, so there is nothing to cancel. */
 
   layer_set_hidden(s_push.l_seam, true);
   layer_set_frame(s_push.l_seam, GRect(0, -4, s_push.w, 4));
@@ -59,8 +61,9 @@ void anim_push(Layer *incoming, Layer *outgoing, Layer *seam, int dir, int w, in
    * starts fully outside, the outgoing ends fully outside. */
   s_push.in = frame_anim(incoming, GRect(0, 0, w, h));
   s_push.out = frame_anim(outgoing, GRect(0, dir > 0 ? -h : h, w, h));
-  /* Seam sits on the join: incoming.y (pushing up) or incoming.y + h (down). */
-  s_push.seam = frame_anim(seam, GRect(0, dir > 0 ? -4 : h - 4, w, 4));
+  /* Seam sits exactly on the join so it is off-screen until the two cards meet
+   * on the display: incoming.y (pushing up) or incoming.y + h (pushing down). */
+  s_push.seam = frame_anim(seam, GRect(0, dir > 0 ? 0 : h - 4, w, 4));
 
   animation_set_handlers(s_push.in, (AnimationHandlers){.stopped = on_stopped}, NULL);
   animation_schedule(s_push.in);

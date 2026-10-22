@@ -22,6 +22,9 @@
         "apps": [
           {
             "package": "com.jollybully.healthglance"
+          },
+          {
+            "package": "com.elliotseeds.fitbitglance"
           }
         ]
       }
