@@ -2,6 +2,7 @@ package com.jollybully.healthglance.pebble
 
 import android.content.Context
 import android.util.Log
+import com.jollybully.healthglance.ble.LiveHr
 import com.jollybully.healthglance.data.GlanceStats
 import io.rebble.pebblekit2.client.DefaultPebbleSender
 import io.rebble.pebblekit2.common.model.PebbleDictionary
@@ -15,6 +16,7 @@ interface PebbleStatsSender {
     suspend fun sendRootStats(stats: GlanceStats, watches: List<WatchIdentifier>? = null): SendOutcome =
         sendStats(stats, watches)
     suspend fun sendError(message: String, watches: List<WatchIdentifier>? = null): SendOutcome
+    suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>? = null): SendOutcome
     fun close()
 }
 
@@ -41,6 +43,11 @@ class LoggingPebbleStatsSender : PebbleStatsSender {
         return SendOutcome.Ok(emptyMap())
     }
 
+    override suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>?): SendOutcome {
+        Log.i(TAG, "mock sendLiveHr bpm=${sample.bpm}")
+        return SendOutcome.Ok(emptyMap())
+    }
+
     override fun close() = Unit
 
     companion object {
@@ -62,6 +69,11 @@ class PebbleKitStatsSender(context: Context) : PebbleStatsSender {
     override suspend fun sendRootStats(stats: GlanceStats, watches: List<WatchIdentifier>?): SendOutcome {
         Log.i(TAG, "sendRootStats steps=${stats.activity.steps} sleep=${stats.sleep.minutesAsleep} rhr=${stats.heart.restingHr}")
         return transmit(stats.toRootDictionary(), watches)
+    }
+
+    override suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>?): SendOutcome {
+        Log.i(TAG, "sendLiveHr bpm=${sample.bpm} state=${sample.state} min=${sample.min} max=${sample.max}")
+        return transmit(sample.toLiveHrDictionary(), watches)
     }
 
     override suspend fun sendError(message: String, watches: List<WatchIdentifier>?): SendOutcome {
@@ -144,4 +156,16 @@ fun GlanceStats.toDictionary(): PebbleDictionary {
 private fun shortTime(value: String): String {
     if (value.length >= 16 && value[10] == 'T') return value.substring(11, 16)
     return value.take(16)
+}
+
+/** Live HR only — six small keys, so the push stays far inside the AppMessage budget. */
+fun LiveHr.Snapshot.toLiveHrDictionary(): PebbleDictionary {
+    return mapOf(
+        MessageKeys.HR_LIVE to PebbleDictionaryItem.UInt32(bpm.coerceAtLeast(0).toLong()),
+        MessageKeys.HR_LIVE_TS to PebbleDictionaryItem.UInt32(atMillis.coerceAtLeast(0L) / 1000L),
+        MessageKeys.HR_LIVE_BATT to PebbleDictionaryItem.UInt32(batteryPercent.coerceAtLeast(0).toLong()),
+        MessageKeys.HR_LIVE_STATE to PebbleDictionaryItem.UInt32(state.code.toLong()),
+        MessageKeys.HR_LIVE_MIN to PebbleDictionaryItem.UInt32(min.coerceAtLeast(0).toLong()),
+        MessageKeys.HR_LIVE_MAX to PebbleDictionaryItem.UInt32(max.coerceAtLeast(0).toLong()),
+    )
 }

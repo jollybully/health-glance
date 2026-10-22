@@ -46,6 +46,13 @@ object MessageKeys {
     const val FLOORS: UInt = 10038u
     const val SPO2: UInt = 10039u
     const val HRV_MS: UInt = 10040u
+    /* Live heart rate from a BLE strap via this companion (append-only). */
+    const val HR_LIVE: UInt = 10041u
+    const val HR_LIVE_TS: UInt = 10042u
+    const val HR_LIVE_BATT: UInt = 10043u
+    const val HR_LIVE_STATE: UInt = 10044u
+    const val HR_LIVE_MIN: UInt = 10045u
+    const val HR_LIVE_MAX: UInt = 10046u
 
     val WATCH_APP_UUID: java.util.UUID =
         java.util.UUID.fromString("ced3f81d-aaae-4ee4-a49c-885a247644ec")

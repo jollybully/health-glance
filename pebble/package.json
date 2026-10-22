@@ -70,7 +70,13 @@
       "WO_ZONE_HIGH",
       "FLOORS",
       "SPO2",
-      "HRV_MS"
+      "HRV_MS",
+      "HR_LIVE",
+      "HR_LIVE_TS",
+      "HR_LIVE_BATT",
+      "HR_LIVE_STATE",
+      "HR_LIVE_MIN",
+      "HR_LIVE_MAX"
     ],
     "resources": {
       "media": []

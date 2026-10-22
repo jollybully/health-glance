@@ -3,7 +3,11 @@ package com.jollybully.healthglance
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import android.Manifest
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.collectAsState
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.clickable
@@ -34,6 +38,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
+import com.jollybully.healthglance.ble.HeartRateService
+import com.jollybully.healthglance.ble.LiveHr
 import com.jollybully.healthglance.data.GlanceStats
 import com.jollybully.healthglance.data.HealthConnectAvailability
 import com.jollybully.healthglance.data.HealthConnectRepository
@@ -98,6 +104,26 @@ fun CompanionScreen(
     var stats by remember { mutableStateOf<GlanceStats?>(sync.cachedStats()) }
     var status by remember { mutableStateOf(sync.cachedStatus()) }
     var busy by remember { mutableStateOf(false) }
+    val live by LiveHr.state.collectAsState()
+
+    /** BLE permissions differ by OS: SCAN/CONNECT on 12+, fine location below it. */
+    fun blePermissions(): Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+    } else {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    fun hasBlePermissions(): Boolean =
+        blePermissions().all {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+
+    val bleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { granted ->
+        if (granted.values.all { it }) HeartRateService.start(context)
+    }
 
     fun updateWorker(schedule: Boolean) {
         if (schedule) StatsRefreshWorker.schedule(context) else StatsRefreshWorker.cancel(context)
@@ -223,6 +249,52 @@ fun CompanionScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Seed emulator sample data")
+                }
+            }
+
+            Box(modifier = Modifier.height(8.dp))
+
+            Text("Live heart rate", fontWeight = FontWeight.Bold, color = Mute)
+            Text(
+                "Reads your strap directly over Bluetooth and streams it to the watch. " +
+                    "Keeps a notification up while it runs.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Mute,
+            )
+            Text(
+                when (live.state) {
+                    LiveHr.State.Idle -> "Off"
+                    LiveHr.State.Scanning -> "Looking for a strap…"
+                    LiveHr.State.Connecting -> "Connecting to ${live.deviceName.ifBlank { "strap" }}…"
+                    LiveHr.State.Streaming -> if (live.bpm > 0) {
+                        "${live.bpm} bpm · min ${live.min} · max ${live.max}"
+                    } else {
+                        "Connected, waiting for a pulse"
+                    }
+                    LiveHr.State.Retry -> "Reconnecting… ${live.detail}"
+                    LiveHr.State.Failed -> "Failed: ${live.detail}"
+                },
+                color = if (live.isFresh) Teal else Ink,
+            )
+            if (live.batteryPercent > 0) {
+                Text("Strap battery ${live.batteryPercent}%", color = Mute)
+            }
+            if (live.state == LiveHr.State.Idle) {
+                Button(
+                    onClick = {
+                        if (hasBlePermissions()) HeartRateService.start(context)
+                        else bleLauncher.launch(blePermissions())
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Connect heart-rate strap")
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { HeartRateService.stop(context) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Stop live heart rate")
                 }
             }
 
