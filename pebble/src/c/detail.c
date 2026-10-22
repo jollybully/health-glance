@@ -109,6 +109,17 @@ static void frame(GContext *ctx, int card, const char *context) {
   }
 }
 
+static const char *strlwr_title(const char *s) {
+  static char buf[ST_LEN];
+  int i = 0;
+  for (; s[i] && i < ST_LEN - 1; i++) {
+    char c = s[i];
+    buf[i] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
+  }
+  buf[i] = '\0';
+  return buf;
+}
+
 static void bar(GContext *ctx, int x, int w, int h, GColor c) {
   if (h < 2) h = 2;
   if (h > BAR_Y - CHART_TOP) h = BAR_Y - CHART_TOP;
@@ -310,6 +321,16 @@ static void draw_workouts(GContext *ctx) {
     snprintf(a, sizeof a, "%d of %d", s_cursor + 1, n);
     label_right(ctx, a, GColorDarkGray, UNIT_Y);
     snprintf(a, sizeof a, "%d.%d km · %d avg hr", dist / 10, dist % 10, avg);
+    label_full(ctx, a, GColorBlack, META_Y);
+  } else if (g_stats.has_workout && g_stats.wo_dur > 0) {
+    /* no history yet: show today's session from the summary keys */
+    snprintf(a, sizeof a, "%d:%02d", g_stats.wo_dur / 60, g_stats.wo_dur % 60);
+    cards_hero_text(ctx, a, HERO_Y);
+    label_left(ctx, g_stats.wo_title[0] ? strlwr_title(g_stats.wo_title) : "workout",
+               GColorDarkGray, UNIT_Y);
+    label_right(ctx, "today", GColorDarkGray, UNIT_Y);
+    snprintf(a, sizeof a, "%d.%d km · %d avg hr", g_stats.wo_dist / 1000,
+             (g_stats.wo_dist % 1000) / 100, g_stats.wo_avg);
     label_full(ctx, a, GColorBlack, META_Y);
   } else {
     cards_hero_text(ctx, "0", HERO_Y);

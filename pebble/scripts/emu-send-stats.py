@@ -93,6 +93,16 @@ PAYLOAD.update({
 })
 
 
+SERIES_KEYS = {"STEPS_SERIES", "SLEEP_SERIES", "HR_SERIES", "WO_SERIES", "WO_HIST",
+               "HR_LIVE", "HR_LIVE_TS", "HR_LIVE_BATT", "HR_LIVE_STATE",
+               "HR_LIVE_MIN", "HR_LIVE_MAX", "SERIES_DAY"}
+
+if "--no-series" in sys.argv:
+    # prove the detail screens degrade honestly when only summary keys arrive
+    PAYLOAD = {k: v for k, v in PAYLOAD.items()
+               if k not in {K[n] for n in SERIES_KEYS}}
+
+
 class _Args:
     emulator = os.environ.get("PEBBLE_EMULATOR", "emery")
     sdk = None
