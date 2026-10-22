@@ -152,6 +152,9 @@ class HealthConnectRepository(private val context: Context) {
         val spo2 = loadSpo2(client, sleepLookback, dayEnd, writer)
         val hrv = loadHrv(client, sleepLookback, dayEnd, writer)
         val workout = loadLastWorkout(client, sleepLookback, dayEnd, writer)
+        val hrHourly = loadHourlyHr(client, dayStart, dayEnd, writer)
+        val stageSlots = loadSleepStageSlots(client, sleepLookback, dayEnd, writer)
+        val history = loadWorkoutHistory(client, sleepLookback, dayEnd, writer, today)
 
         return GlanceStats(
             updatedAt = now.format(isoFormatter),
@@ -171,6 +174,7 @@ class HealthConnectRepository(private val context: Context) {
                 sleepWeek = sleepWeek,
                 spo2Percent = spo2,
                 hrvMs = hrv,
+                stageSlots = stageSlots,
             ),
             heart = HeartStats(
                 restingHr = restingHr,
@@ -179,8 +183,9 @@ class HealthConnectRepository(private val context: Context) {
                 zoneLow = zoneLow,
                 zoneMid = zoneMid,
                 zoneHigh = zoneHigh,
+                hrHourly = hrHourly,
             ),
-            workout = workout,
+            workout = workout.copy(history = history),
         )
     }
 
@@ -760,6 +765,179 @@ class HealthConnectRepository(private val context: Context) {
             ),
             origin = origin,
         )
+    }
+
+
+    /**
+     * Highest bpm in each local hour of today, for the watch's Heart chart.
+     * One paged read of today's samples; hours with no samples stay 0 so the
+     * watch draws nothing rather than inventing a value.
+     */
+    private suspend fun loadHourlyHr(
+        client: HealthConnectClient,
+        start: Instant,
+        end: Instant,
+        writer: String?,
+    ): List<Int> {
+        val out = MutableList(24) { 0 }
+        val records = try {
+            val all = mutableListOf<HeartRateRecord>()
+            var pageToken: String? = null
+            do {
+                val response = client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = HeartRateRecord::class,
+                        timeRangeFilter = TimeRangeFilter.between(start, end),
+                        pageToken = pageToken,
+                    ),
+                )
+                all += response.records
+                pageToken = response.pageToken
+            } while (!pageToken.isNullOrEmpty())
+            all
+        } catch (e: Exception) {
+            Log.w(TAG, "hourly HR read failed", e)
+            return out
+        }
+        val chosen = WriterPicker.preferOrigin(records, writer) { it.metadata.dataOrigin.packageName }
+        for (record in chosen) {
+            for (sample in record.samples) {
+                val hour = sample.time.atZone(zone).hour
+                if (hour !in 0..23) continue
+                val bpm = sample.beatsPerMinute.toInt()
+                if (bpm > out[hour]) out[hour] = bpm
+            }
+        }
+        Log.i(TAG, "hourly HR hours=${out.count { it > 0 }}/24 peak=${out.maxOrNull() ?: 0}")
+        return out
+    }
+
+    /**
+     * The night as 24 equal slots, each mapped to the stage covering its midpoint
+     * (0 deep, 1 light, 2 rem, 3 awake) — the shape of the watch's sleep chart.
+     */
+    private suspend fun loadSleepStageSlots(
+        client: HealthConnectClient,
+        start: Instant,
+        end: Instant,
+        writer: String?,
+    ): List<Int> {
+        val slots = MutableList(24) { 1 }
+        val sessions = try {
+            client.readRecords(
+                ReadRecordsRequest(
+                    recordType = SleepSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                ),
+            ).records
+        } catch (e: Exception) {
+            Log.w(TAG, "sleep slots read failed", e)
+            return slots
+        }
+        val chosen = WriterPicker.preferOrigin(sessions, writer) { it.metadata.dataOrigin.packageName }
+        val session = chosen.maxByOrNull { Duration.between(it.startTime, it.endTime).toMinutes() }
+            ?: return slots
+        val totalMin = Duration.between(session.startTime, session.endTime).toMinutes().toDouble()
+        if (totalMin < 30.0 || session.stages.isEmpty()) return slots
+        for (i in slots.indices) {
+            val mid = session.startTime.plusSeconds(((i + 0.5) / 24.0 * totalMin * 60).toLong())
+            val stage = session.stages.firstOrNull { s ->
+                mid >= s.startTime && mid < s.endTime
+            } ?: continue
+            slots[i] = when (stage.stage) {
+                SleepSessionRecord.STAGE_TYPE_DEEP -> 0
+                SleepSessionRecord.STAGE_TYPE_REM -> 2
+                SleepSessionRecord.STAGE_TYPE_AWAKE,
+                SleepSessionRecord.STAGE_TYPE_OUT_OF_BED,
+                -> 3
+                else -> 1
+            }
+        }
+        Log.i(TAG, "sleep slots=${slots.joinToString("")} stages=${session.stages.size}")
+        return slots
+    }
+
+    /**
+     * The last seven sessions (>=2 min), newest first, for the Workouts screen.
+     * Distance and average HR are per-session lookups, so the count is capped.
+     */
+    private suspend fun loadWorkoutHistory(
+        client: HealthConnectClient,
+        start: Instant,
+        end: Instant,
+        writer: String?,
+        today: LocalDate,
+    ): List<WorkoutEntry> {
+        val sessions = try {
+            client.readRecords(
+                ReadRecordsRequest(
+                    recordType = ExerciseSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                ),
+            ).records
+        } catch (e: Exception) {
+            Log.w(TAG, "workout history read failed", e)
+            return emptyList()
+        }
+        val fromWriter = WriterPicker.preferOrigin(sessions, writer) { it.metadata.dataOrigin.packageName }
+        val usable = fromWriter
+            .filter { ChronoUnit.SECONDS.between(it.startTime, it.endTime) >= 120 }
+            .sortedByDescending { it.endTime }
+            .take(7)
+        return usable.map { session ->
+            val origin = session.metadata.dataOrigin.packageName
+            val durSec = ChronoUnit.SECONDS.between(session.startTime, session.endTime)
+                .toInt().coerceAtLeast(0)
+            val distM = try {
+                client.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(DistanceRecord.DISTANCE_TOTAL),
+                        timeRangeFilter = TimeRangeFilter.between(session.startTime, session.endTime),
+                        dataOriginFilter = originFilter(origin),
+                    ),
+                )[DistanceRecord.DISTANCE_TOTAL]?.inMeters?.roundToInt() ?: 0
+            } catch (_: Exception) {
+                0
+            }
+            val avgHr = try {
+                val hr = client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = HeartRateRecord::class,
+                        timeRangeFilter = TimeRangeFilter.between(session.startTime, session.endTime),
+                    ),
+                ).records.flatMap { it.samples }.map { it.beatsPerMinute }
+                if (hr.isEmpty()) 0 else hr.average().roundToInt()
+            } catch (_: Exception) {
+                0
+            }
+            val daysAgo = ChronoUnit.DAYS.between(
+                session.startTime.atZone(zone).toLocalDate(),
+                today,
+            ).toInt().coerceAtLeast(0)
+            WorkoutEntry(
+                sport = sportCode(session.exerciseType),
+                durationSec = durSec,
+                distanceM = distM,
+                avgHr = avgHr,
+                daysAgo = daysAgo,
+            )
+        }.also {
+            Log.i(TAG, "workout history n=${it.size} " + it.joinToString { e -> "${e.sport}/${e.durationSec}s/${e.daysAgo}d" })
+        }
+    }
+
+    /** Watch's sport table: 0 walk, 1 run, 2 ride, 3 other. */
+    private fun sportCode(exerciseType: Int): Int = when (exerciseType) {
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING,
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING,
+        -> 0
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL,
+        -> 1
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING,
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY,
+        -> 2
+        else -> 3
     }
 
     private suspend fun loadLastWorkout(

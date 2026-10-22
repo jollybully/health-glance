@@ -275,7 +275,19 @@ static void draw_heart(GContext *ctx) {
 
 /* ---------------- workouts ---------------- */
 
-static int wo_count(void) { return s_wo_len / 6; }
+/* The phone always sends a fixed 42-byte buffer, zero-padded past the real
+ * sessions, so count the contiguous non-zero prefix: a padded slot has a zero
+ * duration and must not appear as a 0:00 workout. */
+static int wo_count(void) {
+  int n = s_wo_len / 6;
+  int c = 0;
+  while (c < n) {
+    int secs = s_wo[c * 6] | (s_wo[c * 6 + 1] << 8);
+    if (secs <= 0) break;
+    c++;
+  }
+  return c;
+}
 
 static void wo_entry(int i, int *secs, int *dist_x10, int *avg, int *days) {
   int o = i * 6;

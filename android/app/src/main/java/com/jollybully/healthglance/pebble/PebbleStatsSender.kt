@@ -63,7 +63,7 @@ class PebbleKitStatsSender(context: Context) : PebbleStatsSender {
             TAG,
             "sendStats steps=${stats.activity.steps} sleep=${stats.sleep.minutesAsleep} rhr=${stats.heart.restingHr} wo=${stats.workout.durationSec}s ${stats.workout.zoneLow}/${stats.workout.zoneMid}/${stats.workout.zoneHigh} ${stats.workout.title}",
         )
-        return transmit(stats.toDictionary(), watches)
+        return transmit(stats.toDictionary().withSeries(stats), watches)
     }
 
     override suspend fun sendRootStats(stats: GlanceStats, watches: List<WatchIdentifier>?): SendOutcome {
@@ -168,4 +168,24 @@ fun LiveHr.Snapshot.toLiveHrDictionary(): PebbleDictionary {
         MessageKeys.HR_LIVE_MIN to PebbleDictionaryItem.UInt32(min.coerceAtLeast(0).toLong()),
         MessageKeys.HR_LIVE_MAX to PebbleDictionaryItem.UInt32(max.coerceAtLeast(0).toLong()),
     )
+}
+
+/**
+ * Appends the detail screens' series to a stats dictionary. PebbleKit's byte
+ * array item is `Bytes`; a PebbleDictionary is an immutable map, so this returns
+ * a merged copy rather than mutating.
+ */
+private fun PebbleDictionary.withSeries(stats: GlanceStats): PebbleDictionary {
+    val keys = mapOf(
+        MessageKeys.STEPS_SERIES to "STEPS_SERIES",
+        MessageKeys.SLEEP_SERIES to "SLEEP_SERIES",
+        MessageKeys.HR_SERIES to "HR_SERIES",
+        MessageKeys.WO_SERIES to "WO_SERIES",
+        MessageKeys.WO_HIST to "WO_HIST",
+    )
+    val series = SeriesCodec.all(stats)
+    val extra = keys.mapNotNull { (key, name) ->
+        series[name]?.let { key to PebbleDictionaryItem.Bytes(it) }
+    }.toMap()
+    return this + extra + (MessageKeys.SERIES_DAY to PebbleDictionaryItem.UInt32(0u))
 }

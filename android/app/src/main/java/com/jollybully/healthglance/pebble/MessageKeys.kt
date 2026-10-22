@@ -53,6 +53,13 @@ object MessageKeys {
     const val HR_LIVE_STATE: UInt = 10044u
     const val HR_LIVE_MIN: UInt = 10045u
     const val HR_LIVE_MAX: UInt = 10046u
+    /* Detail-screen series, one byte-array key each (see SeriesCodec). */
+    const val STEPS_SERIES: UInt = 10047u
+    const val SLEEP_SERIES: UInt = 10048u
+    const val HR_SERIES: UInt = 10049u
+    const val WO_SERIES: UInt = 10050u
+    const val WO_HIST: UInt = 10051u
+    const val SERIES_DAY: UInt = 10052u
 
     val WATCH_APP_UUID: java.util.UUID =
         java.util.UUID.fromString("ced3f81d-aaae-4ee4-a49c-885a247644ec")

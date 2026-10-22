@@ -97,6 +97,10 @@ SERIES_KEYS = {"STEPS_SERIES", "SLEEP_SERIES", "HR_SERIES", "WO_SERIES", "WO_HIS
                "HR_LIVE", "HR_LIVE_TS", "HR_LIVE_BATT", "HR_LIVE_STATE",
                "HR_LIVE_MIN", "HR_LIVE_MAX", "SERIES_DAY"}
 
+if "--wo-2" in sys.argv:
+    # mirrors the real companion: two sessions then zero padding to 42 bytes
+    PAYLOAD[K["WO_HIST"]] = ByteArray(WO_HIST_BYTES[:12] + bytes(30))
+
 if "--no-series" in sys.argv:
     # prove the detail screens degrade honestly when only summary keys arrive
     PAYLOAD = {k: v for k, v in PAYLOAD.items()
