@@ -1,6 +1,6 @@
 {
   "name": "health-glance",
-  "author": "Elliot",
+  "author": "jollybully",
   "version": "1.0.0",
   "keywords": [
     "pebble-app"
@@ -23,7 +23,7 @@
       "android": {
         "apps": [
           {
-            "package": "com.elliotseeds.healthglance"
+            "package": "com.jollybully.healthglance"
           }
         ]
       }

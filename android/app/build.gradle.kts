@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.elliotseeds.healthglance"
+    namespace = "com.jollybully.healthglance"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.elliotseeds.healthglance"
+        applicationId = "com.jollybully.healthglance"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

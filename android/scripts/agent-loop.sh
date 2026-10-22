@@ -52,7 +52,7 @@ else
 fi
 
 echo "Seeding Health Connect sample data…"
-adb shell am start -a com.elliotseeds.healthglance.action.SEED_HEALTH_DATA \
+adb shell am start -a com.jollybully.healthglance.action.SEED_HEALTH_DATA \
   -n "$PACKAGE/.debug.SeedHealthDataActivity" >/dev/null
 sleep 3
 

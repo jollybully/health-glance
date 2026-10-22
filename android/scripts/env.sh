@@ -9,7 +9,7 @@ export JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Con
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 
 export HEALTH_GLANCE_AVD="${HEALTH_GLANCE_AVD:-Medium_Phone_API_36.1}"
-export HEALTH_GLANCE_PACKAGE="${HEALTH_GLANCE_PACKAGE:-com.elliotseeds.healthglance}"
+export HEALTH_GLANCE_PACKAGE="${HEALTH_GLANCE_PACKAGE:-com.jollybully.healthglance}"
 
 if [[ ! -x "$JAVA_HOME/bin/java" ]]; then
   echo "env.sh: JAVA_HOME has no java: $JAVA_HOME" >&2

@@ -6,7 +6,7 @@ Alloy watch app for Health Glance — minimal 4-card deck on Pebble Time 2 (Emer
 
 Stats come from the Android companion (`../android`) via PebbleKit AppMessages. There is no PKJS.
 
-On open, the watch paints last-known stats from Alloy `localStorage` (tiny flat snapshot of the four cards), then requests a fresh push from the phone. Phone WorkManager keeps the companion cache warm; there is no watch-side background worker.
+On open, the watch paints last-known stats if a companion push already landed, then requests a fresh push from the phone. Phone WorkManager keeps the companion cache warm; there is no watch-side background worker.
 
 ## Building & running
 
@@ -20,8 +20,8 @@ pebble install --phone <ip>           # live Health Connect data via companion
 
 In `src/embeddedjs/main.js`:
 
-- `DEMO = 1` — seed sample data for emery QA (skips localStorage load)
-- `DEMO = 0` — load cached snapshot if present, then companion sync
+- `DEMO = 1` — seed sample data for emery QA (skips the phone request)
+- `DEMO = 0` — wait for the companion, then paint live stats
 
 ### Emulator QA
 
@@ -52,7 +52,7 @@ src/embeddedjs/manifest.json   Moddable manifest
 package.json                   UUID, companionApp package, messageKeys
 ```
 
-Companion package: `com.elliotseeds.healthglance`.
+Companion package: `com.jollybully.healthglance`.
 
 ## Docs
 

@@ -4,7 +4,12 @@ Health data from **Health Connect** → Android companion → **Pebble Time 2** 
 
 Any Health Connect writer works (Fitbit, Samsung Health, Google Fit, etc.). The companion reads on-device and pushes stats to the watch over PebbleKit 2.
 
-**Personal reference only:** `worker/` is a Cloudflare Google Health OAuth experiment. The shareable companion path does not use it.
+<p>
+<img src="docs/images/watch-steps.png" alt="Steps card" width="160">
+<img src="docs/images/watch-sleep.png" alt="Sleep card" width="160">
+<img src="docs/images/watch-heart.png" alt="Heart card" width="160">
+<img src="docs/images/watch-workout.png" alt="Workout card" width="160">
+</p>
 
 ## Downloads
 
@@ -15,21 +20,39 @@ Latest release assets:
 
 > If those links 404, open [Releases](https://github.com/jollybully/health-glance/releases) and grab the newest build.
 
-## Install (community)
+The debug APK is unsigned and intended for sideload, not Play Store.
+
+## Install
 
 1. Install **Core** on your phone and pair your Pebble Time 2 (`coredevices.coreapp` ≥ 1.0.7.7).
-2. Sideload `health-glance-debug.apk` (enable install from unknown sources if prompted).
+2. Sideload `health-glance-debug.apk` (package `com.jollybully.healthglance`; enable install from unknown sources if prompted).
 3. Open **Health Glance** → grant Health Connect **read** permissions (and background read).
 4. Ensure your fitness app is sharing the metrics you care about into Health Connect.
-5. Install `health-glance.pbw` on the watch (Core / developer sideload, or `pebble install --phone <PHONE_IP>` if you have the Pebble toolchain).
+5. Install `health-glance.pbw` on the watch (Core developer sideload, or `pebble install --phone <PHONE_IP>` if you have the Pebble toolchain).
 6. Allow the companion when Core prompts. Open the watch app — it paints last-known stats immediately, then requests a fresh push.
+
+## Replace Pebble Health (UP Quick Launch)
+
+Stock Pebble Health is a separate app. Health Glance does not hijack its UUID — assign this app to **Up** instead:
+
+1. On the watch: **Settings → Quick Launch → Up → Health Glance** (wording may vary slightly in Core).
+2. Optionally ignore or hide stock **Pebble Health** so Up no longer opens it.
+3. From the watchface, press **Up** → Health Glance opens on **Steps**. Keep pressing **Up** through Sleep → Heart → Workout. **Down on Steps** exits back to the watchface.
+
+| Button | On Steps | On other cards |
+|--------|----------|----------------|
+| Up | → Sleep | Next card (stops on Workout) |
+| Down | Exit → watchface | Previous card |
+| Back | Exit | Exit |
+
+Deck: Steps → Sleep → Heart → Workout.
 
 ## Repo layout
 
 ```
 android/   Kotlin companion (Health Connect + PebbleKit Android 2)
 pebble/    Alloy watch app (Steps / Sleep / Heart / Workout)
-worker/    Personal Google Health OAuth Worker (reference only)
+docs/      README screenshots (DEMO numbers, not live health data)
 ```
 
 ## Build from source (optional)
@@ -58,18 +81,11 @@ pebble install --emulator emery          # set DEMO=1 in main.js for sample numb
 pebble install --phone <PHONE_IP>        # live companion path
 ```
 
-| Button | On Steps | On other cards |
-|--------|----------|----------------|
-| Up | → Sleep | Next card (stops on Workout) |
-| Down | Exit → watchface | Previous card |
-| Back | Exit | Exit |
-
-Deck: Steps → Sleep → Heart → Workout. See `pebble/README.md`.
+See `pebble/README.md`.
 
 ## Sync behaviour
 
-- Watch paints last-known stats from Alloy `localStorage` on open
-- Push on watch app open (`STATS_REQ`) and when companion syncs
+- Watch paints last-known stats on open, then requests a fresh push (`STATS_REQ`)
 - Manual **Sync & push to watch** in the companion
 - Periodic WorkManager refresh every **30 minutes** (phone-side cache; AppMessage delivery still needs Core + open watch app)
 
