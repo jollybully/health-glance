@@ -85,7 +85,10 @@ class HeartRateService : Service(), HeartRateClient.Listener {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var client: HeartRateClient? = null
-    private var sender: PebbleStatsSender = PebbleKitStatsSender(this)
+    /* Built in onCreate, never here: service fields are constructed before
+     * attachBaseContext, so `this` has no base context yet and any sender built
+     * from it dies with a NullPointerException. */
+    private var sender: PebbleStatsSender? = null
     private var publishJob: Job? = null
     private var reconnectJob: Job? = null
     private var inForeground = false
@@ -96,12 +99,27 @@ class HeartRateService : Service(), HeartRateClient.Listener {
     private var sessionMin = 0
     private var sessionMax = 0
     private var battery = 0
+    /** Last failure reason, kept visible across the retry loop: a scanner that
+     *  silently goes back to "Looking…" teaches the user nothing. */
+    private var lastFailure = ""
     private var snapshot = LiveHr.Snapshot()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun senderOrCreate(): PebbleStatsSender {
+        sender?.let { return it }
+        /* applicationContext, not this: by now both are valid, but the app context
+         * outlives the service and the sender holds it. */
+        return PebbleKitStatsSender(applicationContext).also { sender = it }
+    }
+
     override fun onCreate() {
         super.onCreate()
+        try {
+            senderOrCreate()
+        } catch (e: Exception) {
+            Log.e(TAG, "could not build the watch sender", e)
+        }
         try {
             createChannel()
         } catch (e: Exception) {
@@ -220,7 +238,8 @@ class HeartRateService : Service(), HeartRateClient.Listener {
         client = null
         snapshot = snapshot.copy(state = LiveHr.State.Idle, bpm = 0, detail = detail)
         LiveHr.set(snapshot)
-        scope.launch { runCatching { sender.close() } }
+        scope.launch { runCatching { sender?.close() } }
+        sender = null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
@@ -248,6 +267,7 @@ class HeartRateService : Service(), HeartRateClient.Listener {
     }
 
     override fun onStreaming(deviceName: String) {
+        lastFailure = ""
         HealthGlanceApp.breadcrumb("streaming from $deviceName")
         window.clear()
         sessionMin = 0
@@ -295,6 +315,7 @@ class HeartRateService : Service(), HeartRateClient.Listener {
 
     override fun onDropped(reason: String) {
         HealthGlanceApp.breadcrumb("dropped: $reason")
+        if (!reason.lowercase().contains("stopped")) lastFailure = reason
         client?.let { runCatching { it.stop() } }
         client = null
         snapshot = snapshot.copy(state = LiveHr.State.Retry, detail = reason)
@@ -321,7 +342,7 @@ class HeartRateService : Service(), HeartRateClient.Listener {
         lastPublishedBpm = snapshot.bpm
         lastPublishAt = System.currentTimeMillis()
         val outcome = try {
-            sender.sendLiveHr(snapshot.copy(publishedAtMillis = lastPublishAt))
+            senderOrCreate().sendLiveHr(snapshot.copy(publishedAtMillis = lastPublishAt))
         } catch (e: Exception) {
             Log.w(TAG, "live hr push failed", e)
             null

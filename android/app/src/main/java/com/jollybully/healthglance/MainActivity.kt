@@ -297,7 +297,14 @@ fun CompanionScreen(
                 Text("Strap battery ${live.batteryPercent}%", color = Mute)
             }
             /* Turn a dead end into the next action. */
-            if (live.state == LiveHr.State.Retry || live.state == LiveHr.State.Failed) {
+            if (live.detail.isNotBlank() && live.state != LiveHr.State.Streaming &&
+                live.state != LiveHr.State.Idle
+            ) {
+                Text(live.detail, style = MaterialTheme.typography.bodySmall, color = Ink)
+            }
+            if (live.state == LiveHr.State.Retry || live.state == LiveHr.State.Failed ||
+                live.state == LiveHr.State.Scanning
+            ) {
                 Text(
                     "Nothing connected. Check the monitor is awake and broadcasting, " +
                         "then tap Connect again. Android Bluetooth must be on, and the " +
