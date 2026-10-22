@@ -31,11 +31,13 @@ def build(ctx):
 
     cached_env = ctx.env
     demo = os.environ.get('HG_DEMO', '0')
+    touch_test = os.environ.get('HG_TOUCH_SELFTEST', '0')
     for platform in ctx.env.TARGET_PLATFORMS:
         ctx.env = ctx.all_envs[platform]
         ctx.set_group(ctx.env.PLATFORM_NAME)
         # HG_DEMO=1 seeds the fixture numbers for emulator QA; 0 for live data.
         ctx.env.append_value('CFLAGS', ['-DHG_DEMO={}'.format(demo)])
+        ctx.env.append_value('CFLAGS', ['-DHG_TOUCH_SELFTEST={}'.format(touch_test)])
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
         ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c'), target=app_elf, bin_type='app')
 

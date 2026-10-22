@@ -4,6 +4,10 @@
 #include "cards.h"
 #include "anim.h"
 
+#ifndef HG_TOUCH_SELFTEST
+#define HG_TOUCH_SELFTEST 0
+#endif
+
 /* Health Glance — native C watch app (Pebble Time 2 / Emery).
  * Same UUID, same AppMessage keys, same 4-card deck as the Alloy build. */
 
@@ -94,6 +98,139 @@ static void push(int to, int dir) {
   anim_push(li, lo, s_seam, dir, s_w, s_h, push_done, NULL);
 }
 
+/* ---------------- touch scrolling ---------------- */
+
+/* Drag the deck: the finger pulls the neighbouring card into view, and letting go
+ * past a third of the screen commits the page. Finger down = the next card comes
+ * down from the top, exactly like pressing Up. */
+#define DRAG_START_PX 10
+#define DRAG_COMMIT_DIV 3
+
+static bool s_drag;
+static int s_drag_x0, s_drag_y0;
+static int s_drag_dir; /* 0 undecided, -1 next-from-top, +1 previous-from-bottom */
+static int s_drag_dy;
+
+static void drag_apply(int dy) {
+  if (s_drag_dir < 0) {
+    if (dy < 0) dy = 0;
+    if (dy > s_h) dy = s_h;
+  } else {
+    if (dy > 0) dy = 0;
+    if (dy < -s_h) dy = -s_h;
+  }
+  s_drag_dy = dy;
+
+  int in = 1 - s_front;
+  int y_in = (s_drag_dir < 0 ? -s_h : s_h) + dy;
+  int join = s_drag_dir < 0 ? y_in + s_h : y_in;
+  layer_set_frame(s_card[in], GRect(0, y_in, s_w, s_h));
+  layer_set_frame(s_card[s_front], GRect(0, s_drag_dir < 0 ? join : join - s_h, s_w, s_h));
+  layer_set_frame(s_seam, GRect(0, join, s_w, 4));
+  layer_set_hidden(s_seam, false);
+}
+
+static void drag_pick_direction(int dir) {
+  int to = s_card_idx + (dir < 0 ? 1 : -1);
+  if (to < 0 || to >= CARD_COUNT) return; /* nothing to pull in that way */
+  int in = 1 - s_front;
+  layer_set_frame(s_card[in], GRect(0, dir < 0 ? -s_h : s_h, s_w, s_h));
+  *(int *)layer_get_data(s_card[in]) = to;
+  layer_set_hidden(s_card[in], false);
+  layer_mark_dirty(s_card[in]);
+  layer_set_frame(s_card[s_front], GRect(0, 0, s_w, s_h));
+  layer_set_hidden(s_card[s_front], false);
+  s_drag_dir = dir;
+}
+
+static void drag_retreat_done(void *ctx) {
+  (void)ctx;
+  layer_mark_dirty(s_card[s_front]);
+}
+
+static void touch_handler(const TouchEvent *event, void *context) {
+  (void)context;
+  if (!event) return;
+
+  if (event->type == TouchEvent_Touchdown) {
+    s_drag = false;
+    s_drag_dir = 0;
+    s_drag_dy = 0;
+    if (anim_busy()) return; /* let the running page turn finish */
+    s_drag = true;
+    s_drag_x0 = event->x;
+    s_drag_y0 = event->y;
+    return;
+  }
+
+  if (!s_drag) return;
+
+  if (event->type == TouchEvent_PositionUpdate) {
+    int dy = event->y - s_drag_y0;
+    int dx = event->x - s_drag_x0;
+    if (s_drag_dir == 0) {
+      if (dy > -DRAG_START_PX && dy < DRAG_START_PX) return;
+      if (dy < 0 ? -dy <= (dx < 0 ? -dx : dx) : dy <= (dx < 0 ? -dx : dx)) return; /* too horizontal */
+      drag_pick_direction(dy > 0 ? -1 : 1);
+      if (s_drag_dir == 0) return; /* at an end: no card to pull in */
+    }
+    drag_apply(dy);
+    return;
+  }
+
+  if (event->type == TouchEvent_Liftoff) {
+    s_drag = false;
+    if (s_drag_dir == 0) return;
+    int travel = s_drag_dir < 0 ? s_drag_dy : -s_drag_dy;
+    int in = 1 - s_front;
+    if (travel * DRAG_COMMIT_DIV >= s_h) {
+      cards_warp_start(s_card[in]);
+      anim_push(s_card[in], s_card[s_front], s_seam, s_drag_dir, s_w, s_h, push_done, NULL);
+    } else {
+      anim_retreat(s_card[in], s_card[s_front], s_seam, s_drag_dir, s_w, s_h,
+                   drag_retreat_done, NULL);
+    }
+    s_drag_dir = 0;
+    s_drag_dy = 0;
+  }
+}
+
+#if HG_TOUCH_SELFTEST
+/* There is no way to inject touchscreen events into the emulator (no CLI command,
+ * no QEMU packet), so this replays a synthetic swipe through the real handler:
+ * Select = a long drag (should page), long-press Select = a short one (should
+ * spring back). Off in shipped builds. */
+static void synth_swipe(int dy) {
+  TouchEvent ev;
+  ev.type = TouchEvent_Touchdown;
+  ev.x = 100;
+  ev.y = 140;
+  touch_handler(&ev, NULL);
+  for (int i = 1; i <= 8; i++) {
+    ev.type = TouchEvent_PositionUpdate;
+    ev.y = 140 + (dy * i) / 8;
+    touch_handler(&ev, NULL);
+  }
+  ev.type = TouchEvent_Liftoff;
+  ev.y = 140 + dy;
+  touch_handler(&ev, NULL);
+}
+
+static void selftest_click(ClickRecognizerRef r, void *ctx) {
+  (void)r;
+  (void)ctx;
+  APP_LOG(APP_LOG_LEVEL_INFO, "selftest: long drag");
+  synth_swipe(150);
+}
+
+static void selftest_long_click(ClickRecognizerRef r, void *ctx) {
+  (void)r;
+  (void)ctx;
+  APP_LOG(APP_LOG_LEVEL_INFO, "selftest: short drag");
+  synth_swipe(20);
+}
+#endif
+
 /* ---------------- clicks ---------------- */
 
 static void up_click(ClickRecognizerRef r, void *ctx) {
@@ -126,6 +263,10 @@ static void click_config(void *ctx) {
   window_single_click_subscribe(BUTTON_ID_UP, up_click);
   window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
   window_single_click_subscribe(BUTTON_ID_BACK, back_click);
+#if HG_TOUCH_SELFTEST
+  window_single_click_subscribe(BUTTON_ID_SELECT, selftest_click);
+  window_long_click_subscribe(BUTTON_ID_SELECT, 0, selftest_long_click, NULL);
+#endif
 }
 
 /* ---------------- AppMessage ---------------- */
@@ -350,10 +491,12 @@ static void window_load(Window *w) {
 static void window_appear(Window *w) {
   (void)w;
   start_req_loop();
+  if (touch_service_is_enabled()) touch_service_subscribe(touch_handler, NULL);
 }
 
 static void window_disappear(Window *w) {
   (void)w;
+  touch_service_unsubscribe();
   if (s_req_timer) {
     app_timer_cancel(s_req_timer);
     s_req_timer = NULL;
