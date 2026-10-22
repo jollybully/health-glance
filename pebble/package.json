@@ -76,7 +76,13 @@
       "HR_LIVE_BATT",
       "HR_LIVE_STATE",
       "HR_LIVE_MIN",
-      "HR_LIVE_MAX"
+      "HR_LIVE_MAX",
+      "STEPS_SERIES",
+      "SLEEP_SERIES",
+      "HR_SERIES",
+      "WO_SERIES",
+      "WO_HIST",
+      "SERIES_DAY"
     ],
     "resources": {
       "media": []

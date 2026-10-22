@@ -19,7 +19,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 
 from libpebble2.communication import PebbleConnection
-from libpebble2.services.appmessage import AppMessageService, CString, Uint32
+from libpebble2.services.appmessage import AppMessageService, ByteArray, CString, Uint32
 from pebble_tool.commands.base import PebbleTransportEmulator
 from pebble_tool.sdk.project import PebbleProject
 
@@ -31,7 +31,33 @@ K = {
     "HR_MIN": 10019, "HR_MAX": 10020, "WO_DUR_S": 10027, "WO_CAL": 10028,
     "WO_AVG_HR": 10029, "WO_DIST_M": 10031, "WO_TITLE": 10034,
     "WO_ZONE_LOW": 10035, "WO_ZONE_MID": 10036, "WO_ZONE_HIGH": 10037,
+    # live HR (companion BLE strap reader) and the detail-screen series
+    "HR_LIVE": 10041, "HR_LIVE_TS": 10042, "HR_LIVE_BATT": 10043,
+    "HR_LIVE_STATE": 10044, "HR_LIVE_MIN": 10045, "HR_LIVE_MAX": 10046,
+    "STEPS_SERIES": 10047, "SLEEP_SERIES": 10048, "HR_SERIES": 10049,
+    "WO_SERIES": 10050, "WO_HIST": 10051, "SERIES_DAY": 10052,
 }
+
+# 24 hourly slots, sent as byte arrays so six keys cover four charts.
+STEPS_HOURLY = [0, 0, 0, 0, 0, 0, 80, 180, 320, 520, 780, 1240,
+                960, 680, 860, 600, 420, 500, 720, 380, 260, 120, 40, 0]
+STEPS_BYTES = bytes(min(255, v // 100) for v in STEPS_HOURLY)
+# 0 deep, 1 light, 2 rem, 3 awake
+SLEEP_BYTES = bytes([3, 2, 1, 0, 0, 1, 2, 0, 1, 1, 0, 2,
+                     1, 0, 0, 1, 2, 1, 0, 0, 1, 2, 3, 3])
+HR_BYTES = bytes([72, 68, 66, 64, 70, 78, 96, 112, 104, 92, 88, 121,
+                  148, 108, 96, 104, 118, 132, 106, 94, 86, 80, 76, 70])
+WO_BYTES = bytes([0, 42, 31, 62, 0, 31, 0])  # minutes per day, Mon..Sun
+# 7 sessions x 6 bytes: [dur_secs LE2, dist_km*10, avg_hr, days_ago, sport]
+WO_HIST_BYTES = bytes([
+    1875 & 0xFF, 1875 >> 8, 43, 137, 0, 0,   # 31:15 walk today
+    2538 & 0xFF, 2538 >> 8, 61, 148, 1, 1,   # 42:18 run yesterday
+    3732 & 0xFF, 3732 >> 8, 180, 121, 3, 2,  # 1:02:12 ride Tuesday
+    1685 & 0xFF, 1685 >> 8, 38, 132, 5, 0,
+    3310 & 0xFF, 3310 >> 8, 92, 141, 6, 1,
+    2100 & 0xFF, 2100 >> 8, 51, 128, 8, 0,
+    2880 & 0xFF, 2880 >> 8, 74, 136, 10, 2,
+])
 
 # Deliberately different from the DEMO fixture so a screenshot proves live data.
 RAW = {
@@ -49,6 +75,22 @@ PAYLOAD = {
     K[name]: (CString(value) if isinstance(value, str) else Uint32(value))
     for name, value in RAW.items()
 }
+# Detail-screen series, as byte arrays: six keys cover four charts. The watch falls
+# back to the card's own numbers when these are absent.
+PAYLOAD.update({
+    K["HR_LIVE"]: Uint32(132),
+    K["HR_LIVE_TS"]: Uint32(int(time.time())),
+    K["HR_LIVE_BATT"]: Uint32(84),
+    K["HR_LIVE_STATE"]: Uint32(3),
+    K["HR_LIVE_MIN"]: Uint32(61),
+    K["HR_LIVE_MAX"]: Uint32(148),
+    K["SERIES_DAY"]: Uint32(0),
+    K["STEPS_SERIES"]: ByteArray(STEPS_BYTES),
+    K["SLEEP_SERIES"]: ByteArray(SLEEP_BYTES),
+    K["HR_SERIES"]: ByteArray(HR_BYTES),
+    K["WO_SERIES"]: ByteArray(WO_BYTES),
+    K["WO_HIST"]: ByteArray(WO_HIST_BYTES),
+})
 
 
 class _Args:

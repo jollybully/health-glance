@@ -1,6 +1,7 @@
 #include "stats.h"
 
 Stats g_stats;
+LiveHr g_live;
 
 static void set_clock(char *dst, const char *src) {
   strncpy(dst, src, ST_LEN - 1);

@@ -22,6 +22,16 @@ typedef struct {
 
 extern Stats g_stats;
 
+/* Live heart rate from the companion's BLE strap reader (HR_LIVE* keys).
+ * Deliberately NOT part of Stats and never written to the cache: a stale "live"
+ * reading tomorrow morning would be a lie. */
+typedef struct {
+  int bpm, min, max, batt, state;
+  uint32_t ts; /* phone clock, seconds */
+} LiveHr;
+
+extern LiveHr g_live;
+
 void stats_init(void);
 /* Short "HH:MM" view of an ISO timestamp, same slicing rules as the JS app. */
 const char *stats_clock(const char *v);

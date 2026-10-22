@@ -4,6 +4,7 @@
 #include "cards.h"
 #include "anim.h"
 #include "mockups.h"
+#include "detail.h"
 
 #ifndef HG_TOUCH_SELFTEST
 #define HG_TOUCH_SELFTEST 0
@@ -273,12 +274,14 @@ static void selftest_long_click(ClickRecognizerRef r, void *ctx) {
 static void up_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
+  if (detail_up()) return; /* the detail screen cycles instead of the deck */
   if (s_card_idx < CARD_COUNT - 1) push(s_card_idx + 1, -1); /* next card enters from the top */
 }
 
 static void down_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
+  if (detail_down()) return;
   if (anim_busy()) return; /* let the push settle before acting on the deck */
   if (s_card_idx == 0) {
     window_stack_pop_all(true); /* Down on Steps exits to the watchface */
@@ -287,9 +290,20 @@ static void down_click(ClickRecognizerRef r, void *ctx) {
   push(s_card_idx - 1, 1); /* previous card enters from the bottom */
 }
 
+static void select_click(ClickRecognizerRef r, void *ctx) {
+  (void)r;
+  (void)ctx;
+  if (anim_busy() || detail_is_open()) return;
+  detail_open(s_card_idx);
+}
+
 static void back_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
+  if (detail_is_open()) {
+    detail_close();
+    return;
+  }
   /* Cancel first: the layers are destroyed in window_unload. */
   anim_cancel();
   window_stack_pop_all(true);
@@ -303,6 +317,7 @@ static void click_config(void *ctx) {
   window_single_click_subscribe(BUTTON_ID_BACK, mock_back);
   return;
 #endif
+  window_single_click_subscribe(BUTTON_ID_SELECT, select_click);
   window_single_click_subscribe(BUTTON_ID_UP, up_click);
   window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
   window_single_click_subscribe(BUTTON_ID_BACK, back_click);
@@ -469,6 +484,31 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
       s->wo_mid = iv;
     } else if (k == MESSAGE_KEY_WO_ZONE_HIGH) {
       s->wo_hi = iv;
+    } else if (k == MESSAGE_KEY_HR_LIVE) {
+      g_live.bpm = iv;
+    } else if (k == MESSAGE_KEY_HR_LIVE_TS) {
+      g_live.ts = (uint32_t)iv;
+    } else if (k == MESSAGE_KEY_HR_LIVE_BATT) {
+      g_live.batt = iv;
+    } else if (k == MESSAGE_KEY_HR_LIVE_STATE) {
+      g_live.state = iv;
+    } else if (k == MESSAGE_KEY_HR_LIVE_MIN) {
+      g_live.min = iv;
+    } else if (k == MESSAGE_KEY_HR_LIVE_MAX) {
+      g_live.max = iv;
+    } else if (k == MESSAGE_KEY_SERIES_DAY) {
+      detail_set_day(iv);
+    } else if (k == MESSAGE_KEY_STEPS_SERIES || k == MESSAGE_KEY_SLEEP_SERIES ||
+               k == MESSAGE_KEY_HR_SERIES || k == MESSAGE_KEY_WO_SERIES) {
+      if (t->type == TUPLE_BYTE_ARRAY) {
+        int card = (k == MESSAGE_KEY_STEPS_SERIES)   ? 0
+                   : (k == MESSAGE_KEY_SLEEP_SERIES) ? 1
+                   : (k == MESSAGE_KEY_HR_SERIES)    ? 2
+                                                     : 3;
+        detail_set_series(card, t->value->data, t->length);
+      }
+    } else if (k == MESSAGE_KEY_WO_HIST) {
+      if (t->type == TUPLE_BYTE_ARRAY) detail_set_workouts(t->value->data, t->length);
     } else if (k == MESSAGE_KEY_STATS_ERR) {
       if (t->type == TUPLE_CSTRING) {
         strncpy(s->status, t->value->cstring, ST_LEN - 1);
@@ -533,6 +573,7 @@ static void window_load(Window *w) {
   layer_add_child(root, s_card[1]);
   layer_add_child(root, s_card[0]);
   layer_add_child(root, s_seam); /* seam on top of both cards */
+  detail_init(root, b); /* the drill-down screen lives above everything */
 
   /* Always rise into place: quick launch (Up from the watchface) is the case
    * that matters, but every launch reads better with it. */
@@ -576,6 +617,7 @@ static void window_unload(Window *w) {
   }
   cards_warp_cancel();
   anim_cancel();
+  detail_deinit();
   layer_destroy(s_seam);
   layer_destroy(s_card[0]);
   layer_destroy(s_card[1]);

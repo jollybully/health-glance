@@ -83,8 +83,9 @@ static void frame(GContext *ctx, int screen) {
 #if HG_MARK == 2 || HG_MARK == 3
   /* B: chevron + indented title; the pips are the deck's paging cue and a detail
    * screen isn't paging, so nothing sits on the right of the title any more. */
+  /* 18 bold needs ~24px of line height: a 20px box draws nothing at all. */
   graphics_draw_text(ctx, "<", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(2, 6, 12, 20), GTextOverflowModeTrailingEllipsis,
+                     GRect(2, 2, 14, 26), GTextOverflowModeTrailingEllipsis,
                      GTextAlignmentLeft, NULL);
   graphics_draw_text(ctx, titles[screen], fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
                      GRect(14, 1, BW - 60, 32), GTextOverflowModeTrailingEllipsis,
