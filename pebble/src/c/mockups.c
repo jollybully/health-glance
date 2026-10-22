@@ -66,7 +66,7 @@ static void label_right(GContext *ctx, const char *s, GColor c, int y) {
 /* Cap + white body + the card's bar rail, which is always drawn so the chart reads
  * as the progress bar grown upward rather than as a new component. */
 static void frame(GContext *ctx, int screen) {
-  static const char *titles[4] = {"Steps", "Sleep", "Heart", "Workouts"};
+  static const char *titles[4] = {"STEPS", "SLEEP", "HEART", "WORKOUTS"};
   fill(ctx, GColorWhite, GRect(0, 0, 200, 228));
   fill(ctx, CAP_COL[screen], GRect(0, 0, 200, CAP_H));
   graphics_context_set_text_color(ctx, GColorWhite);
