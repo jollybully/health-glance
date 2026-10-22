@@ -73,6 +73,7 @@ static void up_click(ClickRecognizerRef r, void *ctx) {
 static void down_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
+  if (anim_busy()) return; /* let the push settle before acting on the deck */
   if (s_card_idx == 0) {
     window_stack_pop_all(true); /* Down on Steps exits to the watchface */
     return;
@@ -83,6 +84,8 @@ static void down_click(ClickRecognizerRef r, void *ctx) {
 static void back_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
+  /* Cancel first: the layers are destroyed in window_unload. */
+  anim_cancel();
   window_stack_pop_all(true);
 }
 

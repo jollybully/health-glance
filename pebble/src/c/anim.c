@@ -78,5 +78,7 @@ void anim_cancel(void) {
     layer_set_hidden(s_push.l_out, true);
     layer_set_frame(s_push.l_out, GRect(0, 0, s_push.w, s_push.h));
   }
+  /* Drop layer references: the caller may destroy them next. */
+  s_push.l_in = s_push.l_out = s_push.l_seam = NULL;
   s_busy = false;
 }
