@@ -56,6 +56,7 @@ static uint8_t s_wo[WO_MAX * 6];
 static int s_wo_len;
 static int s_day;        /* 0 today, 1 yesterday ... */
 static bool s_live;      /* heart screen showing the strap instead of the graph */
+static bool s_no_live_hint; /* user asked for live while nothing was streaming */
 static bool s_dirty;     /* series changed since the last flash write */
 static int s_waiting_day = -1; /* day asked of the phone, -1 = none */
 static void (*s_request_day)(int day);
@@ -273,7 +274,13 @@ static void draw_heart(GContext *ctx) {
     snprintf(a, sizeof a, "%d", g_stats.resting_hr);
     cards_hero_text(ctx, a, HERO_Y);
     label_left(ctx, "resting bpm", GColorDarkGray, UNIT_Y);
-    label_right(ctx, live_fresh() ? "live ^" : "no series", GColorDarkGray, UNIT_Y);
+    if (live_fresh()) {
+      label_right(ctx, "live ^", GColorDarkGray, UNIT_Y);
+    } else if (s_no_live_hint) {
+      label_right(ctx, "no live", GColorDarkGray, UNIT_Y);
+    } else {
+      label_right(ctx, "no series", GColorDarkGray, UNIT_Y);
+    }
   }
 
   snprintf(a, sizeof a, "min %d · max %d", g_stats.hr_min, g_stats.hr_max);
@@ -423,12 +430,14 @@ int detail_card(void) { return s_card; }
 void detail_open(int card) {
   if (!s_layer || card < 0 || card > 3) return;
   s_card = card;
+  s_no_live_hint = false;
   s_cursor = 0;
   s_day = 0;
-  /* Live is opt-in: the graph is the default even when the strap is streaming,
-   * and Up switches to the live value. A screen that silently changes what the
-   * hero number means is exactly what "glance" must not do. */
-  s_live = false;
+  /* If the strap is streaming, open straight into live: the user tapped into the
+   * Heart screen precisely to see their pulse, and requiring a fresh-sample-timed
+   * Up press meant the live view usually never appeared. Up/Down still toggles
+   * back to today's graph, and the cap says which one is on screen. */
+  s_live = (card == CARD_D_HEART) && live_fresh();
   layer_set_hidden(s_layer, false);
   layer_mark_dirty(s_layer);
   APP_LOG(APP_LOG_LEVEL_INFO, "detail open %d live=%d", card, (int)s_live);
@@ -458,10 +467,12 @@ bool detail_up(void) {
     return true;
   }
   if (s_card == CARD_D_HEART) {
-    if (live_fresh()) { /* only offer live when there is something live to show */
+    if (live_fresh()) {
       s_live = !s_live;
-      layer_mark_dirty(s_layer);
+    } else {
+      s_no_live_hint = true; /* draw_heart says "no live" rather than nothing */
     }
+    layer_mark_dirty(s_layer);
     return true;
   }
   return true; /* consumed: the deck must not page while a detail is open */
