@@ -39,6 +39,13 @@ class SyncCache(context: Context) {
 
     fun loadStatus(): String = prefs.getString(KEY_STATUS, "Ready") ?: "Ready"
 
+    /** What the last series push contained and what the watch transport said. */
+    fun saveSeriesInfo(what: String, outcome: String) {
+        prefs.edit().putString(KEY_SERIES, "$what · $outcome").apply()
+    }
+
+    fun seriesInfo(): String = prefs.getString(KEY_SERIES, "") ?: ""
+
     fun savedAtMillis(): Long = prefs.getLong(KEY_SAVED_AT, 0L)
 
     companion object {
@@ -46,6 +53,7 @@ class SyncCache(context: Context) {
         private const val KEY_STATS_JSON = "stats_json"
         private const val KEY_STATUS = "status"
         private const val KEY_SAVED_AT = "saved_at"
+        private const val KEY_SERIES = "series_info"
 
         fun encodeStats(stats: GlanceStats): String {
             return JSONObject()

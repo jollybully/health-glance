@@ -75,8 +75,9 @@ PAYLOAD = {
     K[name]: (CString(value) if isinstance(value, str) else Uint32(value))
     for name, value in RAW.items()
 }
-# Detail-screen series, as byte arrays: six keys cover four charts. The watch falls
-# back to the card's own numbers when these are absent.
+# Mirror the companion exactly: the cards' scalars go first, then the detail
+# screens' series as their own message (so a byte-array problem cannot take the
+# cards down with it).
 PAYLOAD.update({
     K["HR_LIVE"]: Uint32(132),
     K["HR_LIVE_TS"]: Uint32(int(time.time())),
@@ -84,13 +85,16 @@ PAYLOAD.update({
     K["HR_LIVE_STATE"]: Uint32(3),
     K["HR_LIVE_MIN"]: Uint32(61),
     K["HR_LIVE_MAX"]: Uint32(148),
-    K["SERIES_DAY"]: Uint32(0),
+})
+
+SERIES_PAYLOAD = {
     K["STEPS_SERIES"]: ByteArray(STEPS_BYTES),
     K["SLEEP_SERIES"]: ByteArray(SLEEP_BYTES),
     K["HR_SERIES"]: ByteArray(HR_BYTES),
     K["WO_SERIES"]: ByteArray(WO_BYTES),
     K["WO_HIST"]: ByteArray(WO_HIST_BYTES),
-})
+    K["SERIES_DAY"]: Uint32(0),
+}
 
 
 SERIES_KEYS = {"STEPS_SERIES", "SLEEP_SERIES", "HR_SERIES", "WO_SERIES", "WO_HIST",
@@ -135,7 +139,9 @@ def main():
             print("watch -> phone:", dict(data), flush=True)
             if K["STATS_REQ"] in data:
                 service.send_message(target, PAYLOAD)
-                print("answered STATS_REQ with %d keys" % len(PAYLOAD), flush=True)
+                time.sleep(0.25)
+                service.send_message(target, SERIES_PAYLOAD)
+                print("answered STATS_REQ with %d keys + series" % len(PAYLOAD), flush=True)
 
         service.register_handler("appmessage", on_message)
         print("listening %.0fs for STATS_REQ -> %s" % (listen, target), flush=True)
@@ -144,8 +150,10 @@ def main():
         return
 
     service.send_message(target, PAYLOAD)
+    time.sleep(0.25)
+    service.send_message(target, SERIES_PAYLOAD)
     time.sleep(1.5)
-    print("pushed %d keys -> %s" % (len(PAYLOAD), target))
+    print("pushed %d keys + %d series keys -> %s" % (len(PAYLOAD), len(SERIES_PAYLOAD), target))
 
 
 if __name__ == "__main__":

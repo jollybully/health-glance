@@ -6,6 +6,7 @@ import com.jollybully.healthglance.data.GlanceStats
 import com.jollybully.healthglance.data.HealthConnectAvailability
 import com.jollybully.healthglance.data.HealthConnectRepository
 import com.jollybully.healthglance.pebble.PebbleKitStatsSender
+import com.jollybully.healthglance.pebble.SeriesCodec
 import com.jollybully.healthglance.pebble.PebbleStatsSender
 import com.jollybully.healthglance.pebble.SendOutcome
 import io.rebble.pebblekit2.common.model.WatchIdentifier
@@ -63,6 +64,17 @@ class StatsSync(
         return try {
             val stats = repository.loadStats()
             val outcome = sender.sendStats(stats, watches)
+            /* Separate push: the charts are a bonus, never a reason for the deck
+             * to fail. AppMessage is ACK-gated, so give the first one a moment. */
+            delay(250)
+            try {
+                val seriesOutcome = sender.sendSeries(stats, watches)
+                cache.saveSeriesInfo(SeriesCodec.describe(stats), seriesOutcome.toString())
+                Log.i(TAG, "series push ${SeriesCodec.describe(stats)} outcome=$seriesOutcome")
+            } catch (e: Exception) {
+                Log.w(TAG, "series push failed", e)
+                cache.saveSeriesInfo("series push failed: ${e.message}", "failed")
+            }
             val status = SyncStatus.fromSendOutcome(outcome)
             cache.save(stats, status)
             Log.i(TAG, "sync status=$status steps=${stats.activity.steps}")
@@ -81,6 +93,9 @@ class StatsSync(
     fun cachedStats(): GlanceStats? = cache.loadStats()
 
     fun cachedStatus(): String = cache.loadStatus()
+
+    /** What the last series push packed, and what the watch transport answered. */
+    fun cachedSeriesInfo(): String = cache.seriesInfo()
 
     fun close() {
         sender.close()

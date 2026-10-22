@@ -16,6 +16,7 @@ interface PebbleStatsSender {
     suspend fun sendRootStats(stats: GlanceStats, watches: List<WatchIdentifier>? = null): SendOutcome =
         sendStats(stats, watches)
     suspend fun sendError(message: String, watches: List<WatchIdentifier>? = null): SendOutcome
+    suspend fun sendSeries(stats: GlanceStats, watches: List<WatchIdentifier>? = null): SendOutcome
     suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>? = null): SendOutcome
     fun close()
 }
@@ -43,6 +44,11 @@ class LoggingPebbleStatsSender : PebbleStatsSender {
         return SendOutcome.Ok(emptyMap())
     }
 
+    override suspend fun sendSeries(stats: GlanceStats, watches: List<WatchIdentifier>?): SendOutcome {
+        Log.i(TAG, "mock sendSeries ${SeriesCodec.describe(stats)}")
+        return SendOutcome.Ok(emptyMap())
+    }
+
     override suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>?): SendOutcome {
         Log.i(TAG, "mock sendLiveHr bpm=${sample.bpm}")
         return SendOutcome.Ok(emptyMap())
@@ -63,12 +69,19 @@ class PebbleKitStatsSender(context: Context) : PebbleStatsSender {
             TAG,
             "sendStats steps=${stats.activity.steps} sleep=${stats.sleep.minutesAsleep} rhr=${stats.heart.restingHr} wo=${stats.workout.durationSec}s ${stats.workout.zoneLow}/${stats.workout.zoneMid}/${stats.workout.zoneHigh} ${stats.workout.title}",
         )
-        return transmit(stats.toDictionary().withSeries(stats), watches)
+        return transmit(stats.toDictionary(), watches)
     }
 
     override suspend fun sendRootStats(stats: GlanceStats, watches: List<WatchIdentifier>?): SendOutcome {
         Log.i(TAG, "sendRootStats steps=${stats.activity.steps} sleep=${stats.sleep.minutesAsleep} rhr=${stats.heart.restingHr}")
         return transmit(stats.toRootDictionary(), watches)
+    }
+
+    /** The detail screens' charts, on their own so a byte-array problem cannot
+     *  take the four cards down with it. */
+    override suspend fun sendSeries(stats: GlanceStats, watches: List<WatchIdentifier>?): SendOutcome {
+        Log.i(TAG, "sendSeries ${SeriesCodec.describe(stats)}")
+        return transmit(seriesDictionary(stats), watches)
     }
 
     override suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>?): SendOutcome {
@@ -175,7 +188,8 @@ fun LiveHr.Snapshot.toLiveHrDictionary(): PebbleDictionary {
  * array item is `Bytes`; a PebbleDictionary is an immutable map, so this returns
  * a merged copy rather than mutating.
  */
-private fun PebbleDictionary.withSeries(stats: GlanceStats): PebbleDictionary {
+/** Byte-array series only — the watch merges them into its detail screens. */
+internal fun seriesDictionary(stats: GlanceStats): PebbleDictionary {
     val keys = mapOf(
         MessageKeys.STEPS_SERIES to "STEPS_SERIES",
         MessageKeys.SLEEP_SERIES to "SLEEP_SERIES",
@@ -184,8 +198,8 @@ private fun PebbleDictionary.withSeries(stats: GlanceStats): PebbleDictionary {
         MessageKeys.WO_HIST to "WO_HIST",
     )
     val series = SeriesCodec.all(stats)
-    val extra = keys.mapNotNull { (key, name) ->
+    val dict = keys.mapNotNull { (key, name) ->
         series[name]?.let { key to PebbleDictionaryItem.Bytes(it) }
     }.toMap()
-    return this + extra + (MessageKeys.SERIES_DAY to PebbleDictionaryItem.UInt32(0u))
+    return dict + (MessageKeys.SERIES_DAY to PebbleDictionaryItem.UInt32(0u))
 }

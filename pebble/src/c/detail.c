@@ -159,7 +159,7 @@ static void draw_steps(GContext *ctx) {
     snprintf(a, sizeof a, "%d", g_stats.steps);
     cards_hero_text(ctx, a, HERO_Y);
     label_left(ctx, "steps", GColorDarkGray, UNIT_Y);
-    label_right(ctx, "waiting", GColorDarkGray, UNIT_Y);
+    label_right(ctx, "no series", GColorDarkGray, UNIT_Y);
   }
 
   snprintf(a, sizeof a, "%d.%d km · %d cal", g_stats.dist_m / 1000, (g_stats.dist_m % 1000) / 100,
@@ -195,7 +195,7 @@ static void draw_sleep(GContext *ctx) {
     }
     label_right(ctx, STAGE_NAME[most], GColorDarkGray, UNIT_Y);
   } else {
-    label_right(ctx, "waiting", GColorDarkGray, UNIT_Y);
+    label_right(ctx, "no series", GColorDarkGray, UNIT_Y);
   }
 
   stats_clock_to(t1, sizeof(t1), g_stats.sleep_start);
@@ -265,7 +265,7 @@ static void draw_heart(GContext *ctx) {
     snprintf(a, sizeof a, "%d", g_stats.resting_hr);
     cards_hero_text(ctx, a, HERO_Y);
     label_left(ctx, "resting bpm", GColorDarkGray, UNIT_Y);
-    label_right(ctx, live_fresh() ? "live ↑" : "waiting", GColorDarkGray, UNIT_Y);
+    label_right(ctx, live_fresh() ? "live ^" : "no series", GColorDarkGray, UNIT_Y);
   }
 
   snprintf(a, sizeof a, "min %d · max %d", g_stats.hr_min, g_stats.hr_max);

@@ -205,6 +205,13 @@ fun CompanionScreen(
                 Text("Write perms (seeder): ${if (hasWrite) "yes" else "no"}", color = Mute)
             }
             Text("Status: $status", color = Ink)
+            /* The charts are a separate push, so say plainly what was packed and
+             * what the watch transport answered. Without this, "no graphs" cannot
+             * be told apart from "no data in Health Connect". */
+            val seriesInfo = sync.cachedSeriesInfo()
+            if (seriesInfo.isNotBlank()) {
+                Text("Charts: $seriesInfo", style = MaterialTheme.typography.bodySmall, color = Mute)
+            }
 
             Button(
                 onClick = {

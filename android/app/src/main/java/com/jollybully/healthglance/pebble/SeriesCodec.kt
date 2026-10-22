@@ -89,4 +89,22 @@ object SeriesCodec {
         "WO_SERIES" to workoutWeek(stats.workout),
         "WO_HIST" to workoutHistory(stats.workout),
     )
+
+    /**
+     * A one-line account of what the series actually contain, so the app can show
+     * it. "0/24" hours means Health Connect had no samples, which is a different
+     * fault from the watch never receiving the bytes.
+     */
+    fun describe(stats: com.jollybully.healthglance.data.GlanceStats): String {
+        val steps = stepsSeries(stats.activity)
+        val hr = heartSeries(stats.heart)
+        val slp = sleepSeries(stats.sleep)
+        val week = workoutWeek(stats.workout)
+        val hist = workoutHistory(stats.workout)
+        val woCount = (0 until WO_MAX).count { hist[it * WO_ENTRY].toInt() != 0 || hist[it * WO_ENTRY + 1].toInt() != 0 }
+        return "steps ${steps.count { it.toInt() != 0 }}/24 · " +
+            "hr ${hr.count { it.toInt() != 0 }}/24 · " +
+            "sleep ${slp.size}B · week ${week.count { it.toInt() != 0 }}/7 · " +
+            "sessions $woCount"
+    }
 }
