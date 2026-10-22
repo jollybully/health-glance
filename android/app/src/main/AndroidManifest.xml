@@ -18,6 +18,9 @@
     <!-- Live heart rate: this app is the BLE central for a standard strap -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <!-- Legacy alias on Android 12+: without it the connectedDevice FGS type is
+         denied on every 2021-or-later device and startForeground throws. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_BLUETOOTH" />
     <uses-permission
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />

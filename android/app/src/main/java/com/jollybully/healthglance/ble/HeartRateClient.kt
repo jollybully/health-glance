@@ -50,12 +50,19 @@ class HeartRateClient(
         val BATTERY_SERVICE: UUID = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
         val BATTERY_LEVEL: UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
         val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-        private const val SCAN_TIMEOUT_MS = 15_000L
+        private const val SCAN_TIMEOUT_MS = 20_000L
+        private val MONITOR_HINTS = listOf(
+            "hr", "hrm", "heart", "pulse", "polar", "garmin", "wahoo", "coospo", "magene",
+            "fitbit", "amazfit", "coros", "suunto", "tickr", "h9", "h10", "verity",
+        )
         private const val PREF = "live_hr"
         private const val PREF_ADDRESS = "last_address"
     }
 
     private val handler = Handler(Looper.getMainLooper())
+    /** Names of nearby BLE devices seen while scanning, for the failure message. */
+    @Volatile private var seenNames: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
+    @Volatile private var seenHrDevices = 0
     private var gatt: BluetoothGatt? = null
     private var scanning = false
     @Volatile private var stopped = true
@@ -125,6 +132,22 @@ class HeartRateClient(
         scan(adapter)
     }
 
+    /** A name hint only; the GATT discovery is the real test. */
+    private fun looksLikeMonitor(name: String): Boolean {
+        val n = name.lowercase()
+        return MONITOR_HINTS.any { n.contains(it) }
+    }
+
+    /** What the scan actually saw, for the message when nothing connects. */
+    fun nearbySummary(): String {
+        val hr = seenHrDevices
+        val names = seenNames.toList().take(3)
+        return buildString {
+            append(if (hr > 0) "$hr heart-rate device(s) advertised" else "no heart-rate service advertised")
+            if (names.isNotEmpty()) append("; nearby: ${names.joinToString(", ")}")
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private fun scan(adapter: BluetoothAdapter) {
         val scanner = adapter.bluetoothLeScanner
@@ -132,10 +155,13 @@ class HeartRateClient(
             listener.onDropped("No BLE scanner")
             return
         }
+        seenNames.clear()
+        seenHrDevices = 0
         listener.onScanning()
-        val filters = listOf(
-            ScanFilter.Builder().setServiceUuid(android.os.ParcelUuid(HEART_RATE_SERVICE)).build(),
-        )
+        /* No service filter: a strap that advertises its name but not its services
+         * (or only reveals 0x180D after connecting) would never surface under a
+         * filter, and the user would be told nothing at all. */
+        val filters: List<ScanFilter> = emptyList()
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
@@ -150,7 +176,7 @@ class HeartRateClient(
         handler.postDelayed({
             if (scanning) {
                 stopScan(adapter)
-                listener.onDropped("No heart-rate strap found")
+                listener.onDropped("No strap found (${nearbySummary()})")
             }
         }, SCAN_TIMEOUT_MS)
     }
@@ -171,14 +197,12 @@ class HeartRateClient(
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             if (stopped || gatt != null) return
             val device = result.device ?: return
-            if (result.scanRecord != null &&
-                !result.scanRecord!!.serviceUuids.orEmpty().contains(android.os.ParcelUuid(HEART_RATE_SERVICE)) &&
-                result.scanRecord!!.serviceUuids != null
-            ) {
-                /* Advertises services, but not the heart-rate one: skip it rather
-                 * than connecting to a device that cannot stream. */
-                return
-            }
+            val advertised = result.scanRecord?.serviceUuids.orEmpty().toList()
+            val hasHr = advertised.contains(android.os.ParcelUuid(HEART_RATE_SERVICE))
+            val name = (result.scanRecord?.deviceName ?: device.name ?: "").trim()
+            if (name.isNotEmpty()) seenNames.add(name)
+            if (!hasHr && !looksLikeMonitor(name)) return  /* not a strap: ignore */
+            if (hasHr) seenHrDevices++
             val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
             if (adapter != null) stopScan(adapter)
             prefs.edit().putString(PREF_ADDRESS, device.address).apply()

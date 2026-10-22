@@ -289,16 +289,42 @@ fun CompanionScreen(
                     }
                     LiveHr.State.Retry -> "Reconnecting… ${live.detail}"
                     LiveHr.State.Failed -> "Failed: ${live.detail}"
+                    else -> ""
                 },
                 color = if (live.isFresh) Teal else Ink,
             )
             if (live.batteryPercent > 0) {
                 Text("Strap battery ${live.batteryPercent}%", color = Mute)
             }
+            /* Turn a dead end into the next action. */
+            if (live.state == LiveHr.State.Retry || live.state == LiveHr.State.Failed) {
+                Text(
+                    "Nothing connected. Check the monitor is awake and broadcasting, " +
+                        "then tap Connect again. Android Bluetooth must be on, and the " +
+                        "monitor must not already be connected to another app.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Mute,
+                )
+            }
             if (live.state == LiveHr.State.Idle) {
+                Text(
+                    "Your monitor has to be broadcasting. On a Fitbit that is " +
+                        "Settings > Broadcast Heart Rate (or Heart Rate on Equipment) " +
+                        "on Charge/Track/Sense models. Chest straps usually broadcast " +
+                        "as soon as they are wet and worn.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Mute,
+                )
                 Button(
                     onClick = {
-                        HealthGlanceApp.breadcrumb("Connect tapped")
+                        HealthGlanceApp.breadcrumb(
+                            "Connect tapped sdk=${Build.VERSION.SDK_INT} " +
+                                "ble=${hasBlePermissions()} notif=" +
+                                (androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.POST_NOTIFICATIONS,
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED),
+                        )
                         try {
                             if (hasBlePermissions()) {
                                 HeartRateService.start(context)
@@ -309,6 +335,12 @@ fun CompanionScreen(
                         } catch (e: Throwable) {
                             HealthGlanceApp.record("Connect tap threw: ${HealthGlanceApp.stack(e)}")
                             status = "Connect failed: ${e.javaClass.simpleName}: ${e.message}"
+                            LiveHr.set(
+                                LiveHr.Snapshot(
+                                    state = LiveHr.State.Failed,
+                                    detail = "Connect failed: ${e.javaClass.simpleName}",
+                                ),
+                            )
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),

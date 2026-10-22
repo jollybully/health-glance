@@ -128,6 +128,20 @@ class HeartRateService : Service(), HeartRateClient.Listener {
 
     /** Android kills the process if a foreground service has no notification, so a
      *  failure to build one is reported rather than allowed to crash. */
+    /** Which of the permissions this service needs are actually granted right now. */
+    private fun grantedSummary(): String {
+        val names = listOf(
+            android.Manifest.permission.BLUETOOTH_SCAN,
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.POST_NOTIFICATIONS,
+        )
+        return names.joinToString(",") { n ->
+            val ok = androidx.core.content.ContextCompat.checkSelfPermission(this, n) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            "${n.substringAfterLast('.')}=${if (ok) "y" else "n"}"
+        }
+    }
+
     private fun enterForeground(): Boolean {
         if (inForeground) {
             updateNotification()
@@ -136,11 +150,20 @@ class HeartRateService : Service(), HeartRateClient.Listener {
         return try {
             val notification = buildNotification(0, LiveHr.State.Connecting)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
-                )
+                try {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+                    )
+                } catch (e: SecurityException) {
+                    /* The typed start is refused when the manifest lacks the matching
+                     * FOREGROUND_SERVICE_* permission. Better a plain foreground
+                     * service than the app disappearing. */
+                    HealthGlanceApp.record("typed startForeground refused: ${e.message}")
+                    Log.w(TAG, "typed startForeground refused, retrying untyped", e)
+                    startForeground(NOTIFICATION_ID, notification)
+                }
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
