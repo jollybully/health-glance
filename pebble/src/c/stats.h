@@ -44,5 +44,9 @@ const char *stats_footer(void);
 /* Persist the last pushed snapshot so the deck is never empty on a cold start.
  * Writes only when the values actually changed (flash wear). */
 void stats_load_cache(void);
+/* Writes the scalars and the charts; each is skipped when unchanged (flash wear).
+ * Safe to call every minute: the change checks are what stop it churning. */
 void stats_save_cache(void);
+/* True when a write would actually change something (first fill, or new charts). */
+bool stats_cache_needed(void);
 bool stats_is_cached(void);

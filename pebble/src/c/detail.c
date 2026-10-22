@@ -56,6 +56,8 @@ static uint8_t s_wo[WO_MAX * 6];
 static int s_wo_len;
 static int s_day;        /* 0 today, 1 yesterday ... */
 static bool s_live;      /* heart screen showing the strap instead of the graph */
+static bool s_dirty;     /* series changed since the last flash write */
+static bool s_any;       /* any series has arrived at all */
 
 static bool live_fresh(void) {
   /* HR_LIVE_TS is seconds; give it 20s before calling it live */
@@ -450,6 +452,8 @@ void detail_set_series(int card, const uint8_t *data, int len) {
   memset(s_series[card], 0, SERIES_SLOTS);
   memcpy(s_series[card], data, n);
   s_has_series[card] = true;
+  s_any = true;
+  s_dirty = true;
   detail_redraw();
 }
 
@@ -459,11 +463,50 @@ void detail_set_workouts(const uint8_t *data, int len) {
   memset(s_wo, 0, sizeof s_wo);
   memcpy(s_wo, data, n);
   s_wo_len = n;
+  s_any = true;
+  s_dirty = true;
   s_cursor = 0;
   detail_redraw();
 }
 
 void detail_set_day(int day_offset) {
   s_day = day_offset;
+  detail_redraw();
+}
+
+/* ---------------- persistence ---------------- */
+
+bool detail_has_series(void) { return s_any; }
+
+bool detail_series_dirty(void) { return s_dirty; }
+
+void detail_series_mark_saved(void) { s_dirty = false; }
+
+void detail_export_series(SeriesBlob *out) {
+  memset(out, 0, sizeof(*out));
+  out->magic_ok = 1;
+  for (int i = 0; i < 4; i++) out->have[i] = s_has_series[i] ? 1 : 0;
+  memcpy(out->steps, s_series[CARD_D_STEPS], SERIES_SLOTS);
+  memcpy(out->sleep, s_series[CARD_D_SLEEP], SERIES_SLOTS);
+  memcpy(out->heart, s_series[CARD_D_HEART], SERIES_SLOTS);
+  memcpy(out->week, s_series[CARD_D_WORKOUTS], 7);
+  out->wo_len = (uint8_t)(s_wo_len > WO_MAX * 6 ? WO_MAX * 6 : s_wo_len);
+  if (out->wo_len) memcpy(out->wo, s_wo, out->wo_len);
+}
+
+void detail_import_series(const SeriesBlob *in) {
+  if (!in->magic_ok) return;
+  s_has_series[CARD_D_STEPS] = in->have[0] != 0;
+  s_has_series[CARD_D_SLEEP] = in->have[1] != 0;
+  s_has_series[CARD_D_HEART] = in->have[2] != 0;
+  s_has_series[CARD_D_WORKOUTS] = in->have[3] != 0;
+  memcpy(s_series[CARD_D_STEPS], in->steps, SERIES_SLOTS);
+  memcpy(s_series[CARD_D_SLEEP], in->sleep, SERIES_SLOTS);
+  memcpy(s_series[CARD_D_HEART], in->heart, SERIES_SLOTS);
+  memcpy(s_series[CARD_D_WORKOUTS], in->week, 7);
+  s_wo_len = in->wo_len <= WO_MAX * 6 ? in->wo_len : 0;
+  if (s_wo_len) memcpy(s_wo, in->wo, s_wo_len);
+  s_any = in->have[0] || in->have[1] || in->have[2] || in->have[3] || s_wo_len > 0;
+  s_dirty = false;
   detail_redraw();
 }

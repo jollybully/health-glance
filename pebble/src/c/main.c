@@ -6,6 +6,10 @@
 #include "mockups.h"
 #include "detail.h"
 
+#ifndef HG_CACHE_PROBE
+#define HG_CACHE_PROBE 0
+#endif
+
 #ifndef HG_TOUCH_SELFTEST
 #define HG_TOUCH_SELFTEST 0
 #endif
@@ -333,6 +337,25 @@ static void click_config(void *ctx) {
  * one lost request must not leave the watch empty for half an hour. */
 static AppTimer *s_req_timer;
 static int s_tries;
+
+/* Data lands in two messages (scalars, then charts), so a short follow-up write
+ * catches whatever the first one could not. Flash is spared by the change check. */
+static AppTimer *s_save_timer;
+
+static void save_timer_cb(void *data) {
+  (void)data;
+  s_save_timer = NULL;
+  if (stats_cache_needed()) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "saving cache (follow-up)");
+    stats_save_cache();
+  }
+}
+
+static void schedule_cache_save(void) {
+  if (!s_save_timer) {
+    s_save_timer = app_timer_register(1200, save_timer_cb, NULL);
+  }
+}
 #if !HG_DEMO
 /* Escalating, not machine-gun: every STATS_REQ makes the phone re-read Health
  * Connect, so six asks spread over ~25s is the budget. */
@@ -529,7 +552,9 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
   APP_LOG(APP_LOG_LEVEL_INFO, "inbox root=%d wo=%d steps=%d", (int)got_root, (int)got_wo,
           s->steps);
   if (got_wo) s->has_workout = true;
-  if (got_root || got_wo) {
+  /* The charts travel as their own AppMessage, so a series-only message has to
+   * count as data arriving — without this the cache was never written for them. */
+  if (got_root || got_wo || detail_has_series()) {
     s_loaded = true;
     stats_save_cache();
     if (s_req_timer) {
@@ -538,6 +563,7 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
     }
     strncpy(s->status, "Live", ST_LEN - 1);
     s->status[ST_LEN - 1] = '\0';
+    schedule_cache_save();
     layer_mark_dirty(s_card[s_front]);
   }
 }
@@ -574,6 +600,12 @@ static void window_load(Window *w) {
   layer_add_child(root, s_card[0]);
   layer_add_child(root, s_seam); /* seam on top of both cards */
   detail_init(root, b); /* the drill-down screen lives above everything */
+
+#if HG_CACHE_PROBE
+  /* QA only: paint the cache state where a screenshot can read it. */
+  app_log(APP_LOG_LEVEL_INFO, "CACHE_PROBE steps=%d updated=%s from_cache=%d series=%d",
+          g_stats.steps, g_stats.updated, (int)stats_is_cached(), (int)detail_has_series());
+#endif
 
   /* Always rise into place: quick launch (Up from the watchface) is the case
    * that matters, but every launch reads better with it. */

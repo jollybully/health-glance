@@ -32,4 +32,22 @@ void detail_set_series(int card, const uint8_t *data, int len);
 void detail_set_workouts(const uint8_t *data, int len);
 void detail_set_day(int day_offset);
 
+/* Do we hold any chart data, and does it match what was last written to flash? */
+bool detail_has_series(void);
+bool detail_series_dirty(void);
+void detail_series_mark_saved(void);
+
+/* The charts are five byte arrays, so they persist as their own blob rather than
+ * riding along with the scalars. */
+typedef struct {
+  uint8_t magic_ok;
+  uint8_t have[4];
+  uint8_t steps[24], sleep[24], heart[24], week[7];
+  uint8_t wo_len;
+  uint8_t wo[42];
+} SeriesBlob;
+
+void detail_export_series(SeriesBlob *out);
+void detail_import_series(const SeriesBlob *in);
+
 #endif

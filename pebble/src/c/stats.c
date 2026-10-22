@@ -1,4 +1,5 @@
 #include "stats.h"
+#include "detail.h"
 
 Stats g_stats;
 LiveHr g_live;
@@ -9,6 +10,7 @@ static void set_clock(char *dst, const char *src) {
 }
 
 #define CACHE_KEY 1u
+#define SERIES_KEY 2u
 #define CACHE_MAGIC 0x48475331u /* "HGS1" */
 #define CACHE_VERSION 1
 #define CACHE_HAS_WORKOUT 0x1
@@ -90,12 +92,26 @@ static void stats_from_blob(const CacheBlob *b) {
 void stats_load_cache(void) {
   CacheBlob b;
   int read = persist_read_data(CACHE_KEY, &b, sizeof(b));
-  if (read != (int)sizeof(b)) return;
-  if (b.magic != CACHE_MAGIC || b.version != CACHE_VERSION) return;
-  stats_from_blob(&b);
-  s_last = b;
-  s_have_last = true;
-  s_from_cache = true;
+  if (read == (int)sizeof(b) && b.magic == CACHE_MAGIC && b.version == CACHE_VERSION) {
+    stats_from_blob(&b);
+    s_last = b;
+    s_have_last = true;
+    s_from_cache = true;
+  }
+  /* The charts live in their own key: a cold start must show the same graphs the
+   * last sync drew, not an empty screen that looks like a failed sync. */
+  SeriesBlob sb;
+  int sread = persist_read_data(SERIES_KEY, &sb, sizeof(sb));
+  if (sread == (int)sizeof(sb) && sb.magic_ok) {
+    detail_import_series(&sb);
+    APP_LOG(APP_LOG_LEVEL_INFO, "series cache loaded (%d bytes)", sread);
+  } else {
+    APP_LOG(APP_LOG_LEVEL_INFO, "series cache empty (%d/%d)", sread, (int)sizeof(sb));
+  }
+}
+
+bool stats_cache_needed(void) {
+  return !s_from_cache || detail_series_dirty();
 }
 
 void stats_save_cache(void) {
@@ -105,10 +121,25 @@ void stats_save_cache(void) {
   s_from_cache = false;
   CacheBlob b;
   blob_from_stats(&b);
-  if (s_have_last && memcmp(&b, &s_last, sizeof(b)) == 0) return; /* unchanged: spare the flash */
-  if (persist_write_data(CACHE_KEY, &b, sizeof(b)) == (int)sizeof(b)) {
-    s_last = b;
-    s_have_last = true;
+  if (!s_have_last || memcmp(&b, &s_last, sizeof(b)) != 0) {
+    /* unchanged data spares the flash, but a cold-start read still needs it once */
+    if (persist_write_data(CACHE_KEY, &b, sizeof(b)) == (int)sizeof(b)) {
+      s_last = b;
+      s_have_last = true;
+      APP_LOG(APP_LOG_LEVEL_INFO, "cache written (%d bytes)", (int)sizeof(b));
+    } else {
+      APP_LOG(APP_LOG_LEVEL_ERROR, "cache write FAILED");
+    }
+  }
+  if (detail_series_dirty()) {
+    SeriesBlob sb;
+    detail_export_series(&sb);
+    if (persist_write_data(SERIES_KEY, &sb, sizeof(sb)) == (int)sizeof(sb)) {
+      detail_series_mark_saved();
+      APP_LOG(APP_LOG_LEVEL_INFO, "series written (%d bytes)", (int)sizeof(sb));
+    } else {
+      APP_LOG(APP_LOG_LEVEL_ERROR, "series write FAILED");
+    }
   }
 #endif
 }
