@@ -221,6 +221,12 @@ fun CompanionScreen(
             if (seriesInfo.isNotBlank()) {
                 Text("Charts: $seriesInfo", style = MaterialTheme.typography.bodySmall, color = Mute)
             }
+            /* What the last watch day-cycle request returned: tells apart "no data
+             * in Health Connect" from "the watch never got it". */
+            val dayInfo = sync.cachedDayInfo()
+            if (dayInfo.isNotBlank()) {
+                Text("Day cycling: $dayInfo", style = MaterialTheme.typography.bodySmall, color = Mute)
+            }
 
             Button(
                 onClick = {

@@ -317,8 +317,39 @@ static void wo_entry(int i, int *secs, int *dist_x10, int *avg, int *days) {
 static int wo_column(int days) { return 6 - (days < 0 ? 0 : (days > 6 ? 6 : days)); }
 
 static const char *wo_name(int i) {
-  static const char *names[4] = {"walk", "run", "ride", "swim"};
+  /* Unknown types must not claim to be a sport he did not do. */
+  static const char *names[4] = {"walk", "run", "ride", "other"};
   return names[s_wo[i * 6 + 5] & 3];
+}
+
+/* The actual date of a session, not "today"/"earlier": he could not tell whether
+ * a session was mis-dated because the label was relative. */
+static void wo_when(int days_ago, char *out, size_t n) {
+  static const char *mon[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  time_t now = time(NULL);
+  struct tm tm;
+  struct tm *t = localtime(&now);
+  if (!t) {
+    snprintf(out, n, "%dd", days_ago);
+    return;
+  }
+  tm = *t;
+  tm.tm_mday -= days_ago;
+  tm.tm_isdst = -1;
+  time_t then = mktime(&tm);
+  struct tm *r = localtime(&then);
+  if (!r) {
+    snprintf(out, n, "%dd", days_ago);
+    return;
+  }
+  if (days_ago == 0) {
+    snprintf(out, n, "today");
+  } else if (days_ago == 1) {
+    snprintf(out, n, "yest");
+  } else {
+    snprintf(out, n, "%d %s", r->tm_mday, mon[r->tm_mon % 12]);
+  }
 }
 
 static void draw_workouts(GContext *ctx) {
@@ -373,8 +404,9 @@ static void draw_workouts(GContext *ctx) {
     wo_entry(s_cursor, &secs, &dist, &avg, &days);
     snprintf(a, sizeof a, "%d:%02d", secs / 60, secs % 60);
     cards_hero_text(ctx, a, HERO_Y);
-    snprintf(a, sizeof a, "%s · %s", wo_name(s_cursor),
-             days == 0 ? "today" : (days == 1 ? "yest" : "earlier"));
+    char when[12];
+    wo_when(days, when, sizeof when);
+    snprintf(a, sizeof a, "%s · %s", wo_name(s_cursor), when);
     label_left(ctx, a, GColorDarkGray, UNIT_Y);
     snprintf(a, sizeof a, "%d of %d", s_cursor + 1, n);
     label_right(ctx, a, GColorDarkGray, UNIT_Y);

@@ -97,6 +97,8 @@ class StatsSync(
     /** What the last series push packed, and what the watch transport answered. */
     fun cachedSeriesInfo(): String = cache.seriesInfo()
 
+    fun cachedDayInfo(): String = cache.dayInfo()
+
     fun close() {
         sender.close()
     }

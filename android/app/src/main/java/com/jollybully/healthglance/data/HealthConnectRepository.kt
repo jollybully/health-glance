@@ -194,19 +194,26 @@ class HealthConnectRepository(private val context: Context) {
      * HR for that calendar day. Returns empty lists when there is no data, so the
      * watch shows "no series" rather than an invented chart.
      */
-    suspend fun loadDaySeries(dayOffset: Int): Pair<List<Int>, List<Int>> {
-        val client = clientOrNull() ?: return emptyList<Int>() to emptyList()
+    suspend fun loadDaySeries(dayOffset: Int): DaySeries {
+        val client = clientOrNull() ?: return DaySeries()
         val day = LocalDate.now(zone).minusDays(dayOffset.toLong().coerceAtLeast(0))
         val start = day.atStartOfDay(zone).toInstant()
         val end = day.plusDays(1).atStartOfDay(zone).toInstant()
         return try {
             val steps = loadHourlySteps(client, start, end, null)
             val hr = loadHourlyHr(client, start, end, null)
-            Log.i(TAG, "day series offset=$dayOffset steps=${steps.sum()} hrHours=${hr.count { it > 0 }}")
-            steps to hr
+            /* A night's stages live between the previous evening and this morning,
+             * so ask for the window the watch is actually labelling. */
+            val slots = loadSleepStageSlots(client, start.minusSeconds(12 * 3600), end, null)
+            Log.i(
+                TAG,
+                "day series offset=$dayOffset steps=${steps.sum()} " +
+                    "hrHours=${hr.count { it > 0 }} sleepSlots=${slots.toSet().size} stages",
+            )
+            DaySeries(steps = steps, hr = hr, sleepSlots = slots)
         } catch (e: Exception) {
             Log.w(TAG, "day series failed for offset $dayOffset", e)
-            emptyList<Int>() to emptyList()
+            DaySeries()
         }
     }
 
@@ -1059,3 +1066,10 @@ class HealthConnectRepository(private val context: Context) {
         private const val TAG = "HealthGlance"
     }
 }
+
+/** One past day's charts, as the watch's day cycling needs them. */
+data class DaySeries(
+    val steps: List<Int> = emptyList(),
+    val hr: List<Int> = emptyList(),
+    val sleepSlots: List<Int> = emptyList(),
+)

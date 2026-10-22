@@ -21,6 +21,7 @@ interface PebbleStatsSender {
         day: Int,
         steps: ByteArray,
         heart: ByteArray,
+        sleep: ByteArray,
         watches: List<WatchIdentifier>? = null,
     ): SendOutcome
     suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>? = null): SendOutcome
@@ -59,9 +60,10 @@ class LoggingPebbleStatsSender : PebbleStatsSender {
         day: Int,
         steps: ByteArray,
         heart: ByteArray,
+        sleep: ByteArray,
         watches: List<WatchIdentifier>?,
     ): SendOutcome {
-        Log.i(TAG, "mock sendDaySeries day=$day steps=${steps.size} hr=${heart.size}")
+        Log.i(TAG, "mock sendDaySeries day=$day steps=${steps.size} hr=${heart.size} sleep=${sleep.size}")
         return SendOutcome.Ok(emptyMap())
     }
 
@@ -105,13 +107,17 @@ class PebbleKitStatsSender(context: Context) : PebbleStatsSender {
         day: Int,
         steps: ByteArray,
         heart: ByteArray,
+        sleep: ByteArray,
         watches: List<WatchIdentifier>?,
     ): SendOutcome {
-        Log.i(TAG, "sendDaySeries day=$day steps=${steps.size}B hr=${heart.size}B")
+        Log.i(TAG, "sendDaySeries day=$day steps=${steps.size}B hr=${heart.size}B sleep=${sleep.size}B")
         val dict: PebbleDictionary = mapOf(
             MessageKeys.SERIES_DAY to PebbleDictionaryItem.UInt32(day.toLong().coerceAtLeast(0).toUInt()),
             MessageKeys.STEPS_SERIES to PebbleDictionaryItem.Bytes(steps),
             MessageKeys.HR_SERIES to PebbleDictionaryItem.Bytes(heart),
+            /* Sleep was missing here, which is why cycling back on the Sleep screen
+             * changed the header and nothing else. */
+            MessageKeys.SLEEP_SERIES to PebbleDictionaryItem.Bytes(sleep),
         )
         return transmit(dict, watches)
     }
