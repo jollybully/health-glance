@@ -7,9 +7,116 @@ static void set_clock(char *dst, const char *src) {
   dst[ST_LEN - 1] = '\0';
 }
 
+#define CACHE_KEY 1u
+#define CACHE_MAGIC 0x48475331u /* "HGS1" */
+#define CACHE_VERSION 1
+#define CACHE_HAS_WORKOUT 0x1
+
+/* Kept well under PERSIST_DATA_MAX_LENGTH (256 bytes per key). */
+typedef struct {
+  uint32_t magic;
+  uint16_t version;
+  uint16_t flags;
+  int32_t steps, dist_m, calories, resting_hr, sleep_min;
+  int32_t deep, light, rem, awake;
+  int32_t hr_min, hr_max;
+  int32_t wo_dur, wo_cal, wo_avg, wo_dist, wo_lo, wo_mid, wo_hi;
+  char updated[8], sleep_start[8], sleep_end[8];
+  char wo_title[13];
+} CacheBlob;
+
+static bool s_from_cache;
+static bool s_have_last;
+static CacheBlob s_last;
+
+static void blob_from_stats(CacheBlob *b) {
+  memset(b, 0, sizeof(*b)); /* deterministic padding: the change check memcmps */
+  b->magic = CACHE_MAGIC;
+  b->version = CACHE_VERSION;
+  b->flags = g_stats.has_workout ? CACHE_HAS_WORKOUT : 0;
+  b->steps = g_stats.steps;
+  b->dist_m = g_stats.dist_m;
+  b->calories = g_stats.calories;
+  b->resting_hr = g_stats.resting_hr;
+  b->sleep_min = g_stats.sleep_min;
+  b->deep = g_stats.deep;
+  b->light = g_stats.light;
+  b->rem = g_stats.rem;
+  b->awake = g_stats.awake;
+  b->hr_min = g_stats.hr_min;
+  b->hr_max = g_stats.hr_max;
+  b->wo_dur = g_stats.wo_dur;
+  b->wo_cal = g_stats.wo_cal;
+  b->wo_avg = g_stats.wo_avg;
+  b->wo_dist = g_stats.wo_dist;
+  b->wo_lo = g_stats.wo_lo;
+  b->wo_mid = g_stats.wo_mid;
+  b->wo_hi = g_stats.wo_hi;
+  snprintf(b->updated, sizeof(b->updated), "%s", g_stats.updated);
+  snprintf(b->sleep_start, sizeof(b->sleep_start), "%s", g_stats.sleep_start);
+  snprintf(b->sleep_end, sizeof(b->sleep_end), "%s", g_stats.sleep_end);
+  snprintf(b->wo_title, sizeof(b->wo_title), "%s", g_stats.wo_title);
+}
+
+static void stats_from_blob(const CacheBlob *b) {
+  g_stats.steps = b->steps;
+  g_stats.dist_m = b->dist_m;
+  g_stats.calories = b->calories;
+  g_stats.resting_hr = b->resting_hr;
+  g_stats.sleep_min = b->sleep_min;
+  g_stats.deep = b->deep;
+  g_stats.light = b->light;
+  g_stats.rem = b->rem;
+  g_stats.awake = b->awake;
+  g_stats.hr_min = b->hr_min;
+  g_stats.hr_max = b->hr_max;
+  g_stats.has_workout = (b->flags & CACHE_HAS_WORKOUT) != 0;
+  g_stats.wo_dur = b->wo_dur;
+  g_stats.wo_cal = b->wo_cal;
+  g_stats.wo_avg = b->wo_avg;
+  g_stats.wo_dist = b->wo_dist;
+  g_stats.wo_lo = b->wo_lo;
+  g_stats.wo_mid = b->wo_mid;
+  g_stats.wo_hi = b->wo_hi;
+  snprintf(g_stats.updated, sizeof(g_stats.updated), "%s", b->updated);
+  snprintf(g_stats.sleep_start, sizeof(g_stats.sleep_start), "%s", b->sleep_start);
+  snprintf(g_stats.sleep_end, sizeof(g_stats.sleep_end), "%s", b->sleep_end);
+  snprintf(g_stats.wo_title, sizeof(g_stats.wo_title), "%s", b->wo_title);
+}
+
+void stats_load_cache(void) {
+  CacheBlob b;
+  int read = persist_read_data(CACHE_KEY, &b, sizeof(b));
+  if (read != (int)sizeof(b)) return;
+  if (b.magic != CACHE_MAGIC || b.version != CACHE_VERSION) return;
+  stats_from_blob(&b);
+  s_last = b;
+  s_have_last = true;
+  s_from_cache = true;
+}
+
+void stats_save_cache(void) {
+#if HG_DEMO
+  return; /* never let emulator fixtures masquerade as cached health data */
+#else
+  s_from_cache = false;
+  CacheBlob b;
+  blob_from_stats(&b);
+  if (s_have_last && memcmp(&b, &s_last, sizeof(b)) == 0) return; /* unchanged: spare the flash */
+  if (persist_write_data(CACHE_KEY, &b, sizeof(b)) == (int)sizeof(b)) {
+    s_last = b;
+    s_have_last = true;
+  }
+#endif
+}
+
+bool stats_is_cached(void) { return s_from_cache; }
+
 void stats_init(void) {
   memset(&g_stats, 0, sizeof(g_stats));
   strcpy(g_stats.status, "Waiting for phone");
+  stats_load_cache();
+  if (s_from_cache) strcpy(g_stats.status, "Cached");
 
 #if HG_DEMO
   /* Same fixture numbers the JS app used for emulator QA. */
@@ -67,7 +174,8 @@ const char *stats_clock(const char *v) {
 const char *stats_footer(void) {
   static char buf[ST_LEN + 12];
   if (g_stats.updated[0]) {
-    snprintf(buf, sizeof(buf), "synced %s", stats_clock(g_stats.updated));
+    snprintf(buf, sizeof(buf), "%s %s", s_from_cache ? "cached" : "synced",
+             stats_clock(g_stats.updated));
     return buf;
   }
   return g_stats.status;

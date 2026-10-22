@@ -27,5 +27,12 @@ void stats_init(void);
 const char *stats_clock(const char *v);
 /* Same, into the caller's buffer (use this when two times are needed at once). */
 void stats_clock_to(char *dst, size_t n, const char *v);
-/* "synced HH:MM" once the phone has pushed, otherwise the status line. */
+/* "synced HH:MM" once the phone has pushed, "cached HH:MM" while showing the
+ * last snapshot read from flash, otherwise the status line. */
 const char *stats_footer(void);
+
+/* Persist the last pushed snapshot so the deck is never empty on a cold start.
+ * Writes only when the values actually changed (flash wear). */
+void stats_load_cache(void);
+void stats_save_cache(void);
+bool stats_is_cached(void);

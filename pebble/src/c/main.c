@@ -273,6 +273,7 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
   if (got_wo) s->has_workout = true;
   if (got_root || got_wo) {
     s_loaded = true;
+    stats_save_cache();
     if (s_req_timer) {
       app_timer_cancel(s_req_timer);
       s_req_timer = NULL;

@@ -6,7 +6,7 @@ Native **C** watch app for Health Glance — minimal 4-card deck on Pebble Time 
 
 Stats come from the Android companion (`../android`) via PebbleKit AppMessages. There is no PKJS.
 
-On open, the watch paints last-known stats if a companion push already landed, then requests a fresh push from the phone. Phone WorkManager keeps the companion cache warm; there is no watch-side background worker.
+On open, the watch paints the **last known stats from flash** (so the deck is never empty out of phone range), then asks for a fresh push and replaces them. Phone WorkManager keeps the companion cache warm; there is no watch-side background worker.
 
 This replaced the Alloy/JS build (`src/embeddedjs/*`, Poco, pebbleproxy): XS + Poco shared Emery's 128 KB with the framebuffer, so two-card blits OOM'd. The C build uses 6.7 KB of the 128 KB budget with 124 KB of heap free.
 
@@ -34,6 +34,14 @@ pebble install --phone <ip>               # live Health Connect data via compani
 
 `emu-*-probe/send-stats/launch-app.py` need the pebble-tool python:
 `~/.local/share/uv/tools/pebble-tool/bin/python`.
+
+## Caching
+
+`stats_save_cache()` writes the last pushed snapshot to flash (`persist_write_data`, key 1,
+~120 bytes) and `stats_load_cache()` paints it on a cold start. The footer distinguishes the
+two states: `cached HH:MM` while showing the restored snapshot, `synced HH:MM` once a live push
+lands. Writes are skipped when nothing changed, so a phone that keeps pushing the same numbers
+does not wear the flash, and an `HG_DEMO=1` build never writes fixtures into the cache.
 
 ## Navigation (Up quick-launch)
 
