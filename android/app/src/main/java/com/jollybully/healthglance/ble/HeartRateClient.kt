@@ -19,6 +19,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.jollybully.healthglance.HealthGlanceApp
 import java.util.UUID
 
 /**
@@ -92,8 +93,10 @@ class HeartRateClient(
         try {
             startInner()
         } catch (e: SecurityException) {
+            HealthGlanceApp.record("scan SecurityException: ${HealthGlanceApp.stack(e)}")
             drop("Bluetooth permission needed")
         } catch (e: Exception) {
+            HealthGlanceApp.record("scan failed: ${HealthGlanceApp.stack(e)}")
             drop("Bluetooth: ${e.message ?: e.javaClass.simpleName}")
         }
     }

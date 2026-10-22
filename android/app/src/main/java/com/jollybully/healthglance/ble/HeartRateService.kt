@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.jollybully.healthglance.HealthGlanceApp
 import com.jollybully.healthglance.MainActivity
 import com.jollybully.healthglance.R
 import com.jollybully.healthglance.pebble.PebbleKitStatsSender
@@ -61,6 +62,7 @@ class HeartRateService : Service(), HeartRateClient.Listener {
             } catch (e: Exception) {
                 /* e.g. ForegroundServiceStartNotAllowedException from the background */
                 Log.e(TAG, "could not start the live HR service", e)
+                HealthGlanceApp.record("start service failed: ${HealthGlanceApp.stack(e)}")
                 LiveHr.set(
                     LiveHr.Snapshot(
                         state = LiveHr.State.Failed,
@@ -143,9 +145,11 @@ class HeartRateService : Service(), HeartRateClient.Listener {
                 startForeground(NOTIFICATION_ID, notification)
             }
             inForeground = true
+            HealthGlanceApp.breadcrumb("foreground ok")
             true
         } catch (e: Exception) {
             Log.e(TAG, "startForeground failed", e)
+            HealthGlanceApp.record("startForeground failed: ${HealthGlanceApp.stack(e)}")
             snapshot = snapshot.copy(
                 state = LiveHr.State.Failed,
                 detail = "Notification failed: ${e.javaClass.simpleName}",
@@ -158,12 +162,14 @@ class HeartRateService : Service(), HeartRateClient.Listener {
     private fun connect() {
         reconnectJob?.cancel()
         window.clear()
+        HealthGlanceApp.breadcrumb("connect()")
         try {
             client = HeartRateClient(this, this).also { it.start() }
         } catch (e: SecurityException) {
             /* BLE permission revoked or never granted: the likeliest user-facing
              * failure, and it used to take the whole app down. */
             Log.e(TAG, "BLE permission missing", e)
+            HealthGlanceApp.record("BLE permission: ${HealthGlanceApp.stack(e)}")
             client = null
             snapshot = snapshot.copy(
                 state = LiveHr.State.Failed,
@@ -173,6 +179,7 @@ class HeartRateService : Service(), HeartRateClient.Listener {
             updateNotification()
         } catch (e: Exception) {
             Log.e(TAG, "could not start the BLE client", e)
+            HealthGlanceApp.record("BLE client start failed: ${HealthGlanceApp.stack(e)}")
             client = null
             snapshot = snapshot.copy(
                 state = LiveHr.State.Failed,
@@ -204,18 +211,21 @@ class HeartRateService : Service(), HeartRateClient.Listener {
     /* ---------------- HeartRateClient.Listener ---------------- */
 
     override fun onScanning() {
+        HealthGlanceApp.breadcrumb("scanning")
         snapshot = snapshot.copy(state = LiveHr.State.Scanning, detail = "Looking for a strap")
         LiveHr.set(snapshot)
         updateNotification()
     }
 
     override fun onConnecting(name: String) {
+        HealthGlanceApp.breadcrumb("connecting to $name")
         snapshot = snapshot.copy(state = LiveHr.State.Connecting, deviceName = name, detail = "Connecting")
         LiveHr.set(snapshot)
         updateNotification()
     }
 
     override fun onStreaming(deviceName: String) {
+        HealthGlanceApp.breadcrumb("streaming from $deviceName")
         window.clear()
         sessionMin = 0
         sessionMax = 0
@@ -261,6 +271,7 @@ class HeartRateService : Service(), HeartRateClient.Listener {
     }
 
     override fun onDropped(reason: String) {
+        HealthGlanceApp.breadcrumb("dropped: $reason")
         client?.let { runCatching { it.stop() } }
         client = null
         snapshot = snapshot.copy(state = LiveHr.State.Retry, detail = reason)

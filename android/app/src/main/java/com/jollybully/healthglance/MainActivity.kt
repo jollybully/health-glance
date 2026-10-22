@@ -122,7 +122,16 @@ fun CompanionScreen(
     val bleLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { granted ->
-        if (granted.values.all { it }) HeartRateService.start(context)
+        HealthGlanceApp.breadcrumb("BLE permission result: $granted")
+        if (granted.values.all { it }) {
+            try {
+                HeartRateService.start(context)
+            } catch (e: Throwable) {
+                HealthGlanceApp.record("start after permission threw: ${HealthGlanceApp.stack(e)}")
+            }
+        } else {
+            status = "Bluetooth permission denied"
+        }
     }
 
     fun updateWorker(schedule: Boolean) {
@@ -289,8 +298,18 @@ fun CompanionScreen(
             if (live.state == LiveHr.State.Idle) {
                 Button(
                     onClick = {
-                        if (hasBlePermissions()) HeartRateService.start(context)
-                        else bleLauncher.launch(blePermissions())
+                        HealthGlanceApp.breadcrumb("Connect tapped")
+                        try {
+                            if (hasBlePermissions()) {
+                                HeartRateService.start(context)
+                            } else {
+                                HealthGlanceApp.breadcrumb("asking for BLE permissions")
+                                bleLauncher.launch(blePermissions())
+                            }
+                        } catch (e: Throwable) {
+                            HealthGlanceApp.record("Connect tap threw: ${HealthGlanceApp.stack(e)}")
+                            status = "Connect failed: ${e.javaClass.simpleName}: ${e.message}"
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -303,6 +322,30 @@ fun CompanionScreen(
                 ) {
                     Text("Stop live heart rate")
                 }
+            }
+
+            val lastCrash = remember { HealthGlanceApp.lastCrash() }
+            if (lastCrash.isNotBlank()) {
+                Text("Last crash", fontWeight = FontWeight.Bold, color = Mute)
+                Text(
+                    lastCrash,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Ink,
+                )
+                OutlinedButton(
+                    onClick = {
+                        HealthGlanceApp.clearCrash()
+                        status = "Crash log cleared"
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Clear crash log")
+                }
+            }
+            val trail = remember { HealthGlanceApp.trail() }
+            if (trail.isNotBlank()) {
+                Text("Live HR trail", fontWeight = FontWeight.Bold, color = Mute)
+                Text(trail, style = MaterialTheme.typography.bodySmall, color = Mute)
             }
 
             Box(modifier = Modifier.height(8.dp))
