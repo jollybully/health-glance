@@ -57,22 +57,24 @@ Deck: Steps → Sleep → Heart → Workout.
 
 ## Animation
 
-Full Deck Push + Seam in two stages, so it lands like a PebbleOS transition instead of stopping
-dead: **130 ms `EaseOut`** to 8 px *past* the resting position, then a **75 ms `EaseInOut`**
-settle back onto it. Two full-screen `Layer`s paint card *n* from `g_stats`; a 4 px black seam
-layer rides the join (off-screen at both ends of the travel). Nothing is snapshotted per frame —
-the layers composite.
+Motion is deliberately PebbleOS-flat — no bounce, no overshoot.
 
-Content fills in as the card arrives rather than after it lands: `cards_reveal()` animates a
-0..1000 progress for 260 ms (EaseOut), which grows the step/sleep/zone bars and the HR marker
-out from the left edge and blooms the active pip 5 px → 7 px. At rest the progress is 1000, so
-the settled card is pixel-identical to the Alloy build.
+**Launch:** `launch_anim_start()` slides the deck up from the bottom edge (220 ms `EaseOut`), so
+a quick launch reads like an app being pulled up over the watchface. Any press during the slide
+cancels it and snaps the card home.
 
-One short vibration per page turn (`HG_VIBE_ON_PAGING`, set 0 in `main.c` to silence).
+**Page turn:** Full Deck Push + Seam — two full-screen `Layer`s whose `update_proc` paints card
+*n* from `g_stats`, sliding 165 ms `EaseOut` with a 4 px black seam riding the join (off-screen at
+both ends of the travel). Nothing is snapshotted per frame; the layers composite.
 
-> A custom easing curve would express the overshoot in one animation, but
-> `animation_set_custom_curve()` with a curve that returns more than `ANIMATION_NORMALIZED_MAX`
-> kills the app on SDK 4.17 — hence two chained animations with stock curves.
+**Numbers warp:** the hero glyph block stretches ~1.29× vertically and eases back to its resting
+shape over 240 ms (monotonic ease-out), pivoting on the digits' own centre. Only the numbers
+move — the cap, labels and bars stay put, which is what keeps it feeling native rather than
+jelly. At rest the warp is 1000/1000, so a settled card is pixel-identical to the Alloy build.
+
+> Do not use `animation_set_custom_curve()` for overshoot: a curve that returns more than
+> `ANIMATION_NORMALIZED_MAX` blanks and kills the app on SDK 4.17. Overshoot, if ever wanted,
+> has to be a second animation with stock curves.
 
 ## Layout
 

@@ -42,8 +42,38 @@ static void push_done(void *ctx) {
   layer_mark_dirty(s_card[s_front]);
 }
 
+/* The launch slide: the deck rises from the bottom edge, which is what a quick
+ * launch looks like when an app is pulled up over the watchface. */
+static Animation *s_launch;
+
+static void launch_stopped(Animation *a, bool finished, void *ctx) {
+  (void)a;
+  (void)finished;
+  (void)ctx;
+  s_launch = NULL;
+  layer_set_frame(s_card[0], GRect(0, 0, s_w, s_h));
+}
+
+static void launch_anim_start(void) {
+  layer_set_frame(s_card[0], GRect(0, s_h, s_w, s_h));
+  GRect to = GRect(0, 0, s_w, s_h);
+  PropertyAnimation *pa = property_animation_create_layer_frame(s_card[0], NULL, &to);
+  s_launch = property_animation_get_animation(pa);
+  animation_set_duration(s_launch, 220);
+  animation_set_curve(s_launch, AnimationCurveEaseOut);
+  animation_set_handlers(s_launch, (AnimationHandlers){.stopped = launch_stopped}, NULL);
+  animation_schedule(s_launch);
+  cards_warp_start(s_card[0]); /* the numbers warp in as the deck rises */
+}
+
 static void push(int to, int dir) {
   if (anim_busy() || to < 0 || to >= CARD_COUNT || to == s_card_idx) return;
+
+  if (s_launch) { /* a press during the launch slide cancels it, snapping home */
+    animation_unschedule(s_launch);
+    s_launch = NULL;
+    layer_set_frame(s_card[0], GRect(0, 0, s_w, s_h));
+  }
 
   int in = 1 - s_front, out = s_front;
   Layer *li = s_card[in], *lo = s_card[out];
@@ -310,6 +340,11 @@ static void window_load(Window *w) {
   layer_add_child(root, s_card[1]);
   layer_add_child(root, s_card[0]);
   layer_add_child(root, s_seam); /* seam on top of both cards */
+
+  /* Always rise into place: quick launch (Up from the watchface) is the case
+   * that matters, but every launch reads better with it. */
+  APP_LOG(APP_LOG_LEVEL_INFO, "launch reason %d", (int)launch_reason());
+  launch_anim_start();
 }
 
 static void window_appear(Window *w) {
@@ -327,6 +362,10 @@ static void window_disappear(Window *w) {
 
 static void window_unload(Window *w) {
   (void)w;
+  if (s_launch) {
+    animation_unschedule(s_launch);
+    s_launch = NULL;
+  }
   cards_warp_cancel();
   anim_cancel();
   layer_destroy(s_seam);

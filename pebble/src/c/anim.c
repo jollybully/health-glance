@@ -1,18 +1,9 @@
 #include "anim.h"
 
-/* Full Deck Push + Seam, in two stages so it lands like a PebbleOS transition
- * instead of stopping dead:
- *
- *   stage 1  130 ms, EaseOut   travel to 8 px PAST the resting position
- *   stage 2   75 ms, EaseInOut settle back onto it
- *
- * A custom easing curve would express this in one animation, but
- * animation_set_custom_curve() with an overshooting curve (> ANIMATION_NORMALIZED_MAX)
- * kills the app on SDK 4.17, so the overshoot is done with a second animation. */
+/* Full Deck Push + Seam. One animation per layer with a plain ease-out, which is
+ * how PebbleOS moves a window: quick off the mark, settling without a bounce. */
 
-#define TRAVEL_MS 130
-#define SETTLE_MS 75
-#define OVERSHOOT_PX 8
+#define TRAVEL_MS 165
 
 typedef struct {
   Layer *l_in, *l_out, *l_seam;
@@ -20,7 +11,6 @@ typedef struct {
   AnimDone done;
   void *ctx;
   int w, h, dir;
-  bool settling;
   bool cancelled;
 } Push;
 
@@ -53,53 +43,26 @@ static void finish(void) {
   if (s_push.done) s_push.done(s_push.ctx);
 }
 
-static void stage2_stopped(Animation *a, bool finished_stage, void *ctx) {
+static void travel_stopped(Animation *a, bool finished, void *ctx) {
   (void)a;
-  (void)finished_stage;
-  (void)ctx;
-  if (s_push.cancelled) return;
-  finish();
-}
-
-static void start_stage(int stage);
-
-static void stage1_stopped(Animation *a, bool finished_stage, void *ctx) {
-  (void)a;
-  (void)finished_stage;
+  (void)finished;
   (void)ctx;
   if (s_push.cancelled) return;
   s_push.a_in = s_push.a_out = s_push.a_seam = NULL;
-  start_stage(2);
+  finish();
 }
 
-static void start_stage(int stage) {
+static void start_stage(void) {
   const int w = s_push.w, h = s_push.h, dir = s_push.dir;
-  const int over = -OVERSHOOT_PX * dir; /* +8/-8 past the resting position */
-  const int in_rest = 0;
-  const int in_past = in_rest + over;
-  const int out_rest = dir > 0 ? -h : h;
-  const int out_past = out_rest + over;
-  const int seam_rest = dir > 0 ? 0 : h - 4;
-  const int seam_past = seam_rest + over;
 
-  if (stage == 1) {
-    s_push.a_in = frame_anim(s_push.l_in, GRect(0, in_past, w, h), TRAVEL_MS,
+  s_push.a_in = frame_anim(s_push.l_in, GRect(0, 0, w, h), TRAVEL_MS, AnimationCurveEaseOut);
+  s_push.a_out =
+      frame_anim(s_push.l_out, GRect(0, dir > 0 ? -h : h, w, h), TRAVEL_MS,
+                 AnimationCurveEaseOut);
+  /* Seam sits exactly on the join: incoming.y (pushing up) or incoming.y + h (down). */
+  s_push.a_seam = frame_anim(s_push.l_seam, GRect(0, dir > 0 ? 0 : h - 4, w, 4), TRAVEL_MS,
                              AnimationCurveEaseOut);
-    s_push.a_out = frame_anim(s_push.l_out, GRect(0, out_past, w, h), TRAVEL_MS,
-                              AnimationCurveEaseOut);
-    s_push.a_seam = frame_anim(s_push.l_seam, GRect(0, seam_past, w, 4), TRAVEL_MS,
-                               AnimationCurveEaseOut);
-    animation_set_handlers(s_push.a_in, (AnimationHandlers){.stopped = stage1_stopped}, NULL);
-  } else {
-    s_push.settling = true;
-    s_push.a_in = frame_anim(s_push.l_in, GRect(0, in_rest, w, h), SETTLE_MS,
-                             AnimationCurveEaseInOut);
-    s_push.a_out = frame_anim(s_push.l_out, GRect(0, out_rest, w, h), SETTLE_MS,
-                              AnimationCurveEaseInOut);
-    s_push.a_seam = frame_anim(s_push.l_seam, GRect(0, seam_rest, w, 4), SETTLE_MS,
-                               AnimationCurveEaseInOut);
-    animation_set_handlers(s_push.a_in, (AnimationHandlers){.stopped = stage2_stopped}, NULL);
-  }
+  animation_set_handlers(s_push.a_in, (AnimationHandlers){.stopped = travel_stopped}, NULL);
 
   animation_schedule(s_push.a_in);
   animation_schedule(s_push.a_out);
@@ -116,10 +79,9 @@ void anim_push(Layer *incoming, Layer *outgoing, Layer *seam, int dir, int w, in
   s_push.w = w;
   s_push.h = h;
   s_push.dir = dir;
-  s_push.settling = false;
   s_push.cancelled = false;
   s_busy = true;
-  start_stage(1);
+  start_stage();
 }
 
 void anim_cancel(void) {
