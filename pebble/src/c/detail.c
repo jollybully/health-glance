@@ -300,6 +300,9 @@ static void wo_entry(int i, int *secs, int *dist_x10, int *avg, int *days) {
   /* byte 5 reserved */
 }
 
+/* Which weekly column a session belongs to: 0 = six days ago, 6 = today. */
+static int wo_column(int days) { return 6 - (days < 0 ? 0 : (days > 6 ? 6 : days)); }
+
 static const char *wo_name(int i) {
   static const char *names[4] = {"walk", "run", "ride", "swim"};
   return names[s_wo[i * 6 + 5] & 3];
@@ -312,6 +315,17 @@ static void draw_workouts(GContext *ctx) {
   snprintf(a, sizeof a, n > 1 ? "%d recent" : "this week", n);
   frame(ctx, CARD_D_WORKOUTS, a);
 
+  /* Which column the chosen session occupies. A weekly bar can stand for two
+   * sessions on the same day, so the bar alone cannot say "this one": the block
+   * on the rail beneath it is the unambiguous cue, and the bar goes black as
+   * confirmation. */
+  int sel_col = -1;
+  if (n > 0) {
+    int secs, dist, avg, days;
+    wo_entry(s_cursor, &secs, &dist, &avg, &days);
+    sel_col = wo_column(days);
+  }
+
   if (s_has_series[CARD_D_WORKOUTS]) {
     for (int i = 0; i < 7; i++) {
       int x = X_INSET + i * 26;
@@ -320,7 +334,13 @@ static void draw_workouts(GContext *ctx) {
         fill(ctx, GColorLightGray, GRect(x, BAR_Y - 2, 16, 2)); /* rest day */
         continue;
       }
-      bar(ctx, x, 16, (m * (BAR_Y - 2 - CHART_TOP)) / 90, i == 6 ? GColorBlack : GColorOrange);
+      bar(ctx, x, 16, (m * (BAR_Y - 2 - CHART_TOP)) / 90,
+          i == sel_col ? GColorBlack : GColorOrange);
+    }
+    if (sel_col >= 0) {
+      /* a filled block over the rail: position, not just a shade difference */
+      int x = X_INSET + sel_col * 26;
+      fill(ctx, GColorBlack, GRect(x - 1, BAR_Y, 18, BAR_H));
     }
   }
 
