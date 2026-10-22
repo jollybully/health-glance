@@ -142,9 +142,9 @@ static const uint8_t GLYPH[100] = {
      32,  32,  32,  32,
 };
 
-static void draw_hero(GContext *ctx, const char *text) {
+static void draw_hero_at(GContext *ctx, const char *text, int y0) {
   int x = X_INSET;
-  const int cy = HERO_Y + HERO_BLOCK_H / 2; /* warp pivot: the middle of the digits */
+  const int cy = y0 + HERO_BLOCK_H / 2; /* warp pivot: the middle of the digits */
   for (int i = 0; text[i]; i++) {
     int ch = (unsigned char)text[i];
     int g = -1;
@@ -162,7 +162,7 @@ static void draw_hero(GContext *ctx, const char *text) {
         int bit = 1 << b;
         if ((fill_mask | hole_mask) & bit) {
           int p = b * 4;
-          int top = HERO_Y + GLYPH[p + 1] - 32;
+          int top = y0 + GLYPH[p + 1] - 32;
           int warped_top = cy + ((top - cy) * s_hero_pm) / 1000;
           int warped_h = ((GLYPH[p + 3] - 32) * s_hero_pm) / 1000;
           if (warped_h < 1) warped_h = 1;
@@ -187,7 +187,7 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
   draw_pips(ctx, w, card);
 
   hero_str(hero, sizeof(hero), card);
-  draw_hero(ctx, hero);
+  draw_hero_at(ctx, hero, HERO_Y);
 
   text(ctx, stats_footer(), s_f_body, GColorDarkGray, X_INSET, CUE_Y, bw, 22);
 
@@ -302,3 +302,6 @@ void cards_warp_cancel(void) {
   s_warp_target = NULL;
   s_hero_pm = 1000;
 }
+
+/* Same chunky digits at any y, so drill-down screens share the deck's typography. */
+void cards_hero_text(GContext *ctx, const char *text, int y) { draw_hero_at(ctx, text, y); }
