@@ -14,7 +14,8 @@ void cards_init(void);
  * cap 36px, hero y=44, unit y=108, bar y=136 h=8, meta y=180, footer y=204. */
 void cards_draw(GContext *ctx, GRect bounds, int card);
 
-/* Content animates in: bars/stages grow from the left and the active pip
- * blooms, so a card lands filled rather than snapping. `target` is redrawn. */
-void cards_reveal(Layer *target);
-void cards_cancel_reveal(void);
+/* PebbleOS-style warp: the card's layout and cap stretch then squash as it
+ * arrives, so a page turn feels rubbery rather than rigid. `target` is redrawn
+ * on every frame; at rest every warped coordinate is an identity. */
+void cards_warp_start(Layer *target);
+void cards_warp_cancel(void);

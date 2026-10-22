@@ -35,8 +35,6 @@ static Layer *make_card_layer(GRect frame, int card) {
 
 /* ---------------- deck push ---------------- */
 
-#define HG_VIBE_ON_PAGING 1 /* one short pulse per page turn; set 0 to silence */
-
 static void push_done(void *ctx) {
   (void)ctx;
   s_front = 1 - s_front;
@@ -61,12 +59,9 @@ static void push(int to, int dir) {
   layer_set_frame(s_seam, GRect(0, dir > 0 ? s_h : -4, s_w, 4));
   layer_set_hidden(s_seam, false);
 
-  /* Content fills in as the card arrives, rather than after it lands. */
-  cards_reveal(li);
+  /* The card warps as it arrives: stretch, squash, settle. */
+  cards_warp_start(li);
   anim_push(li, lo, s_seam, dir, s_w, s_h, push_done, NULL);
-#if HG_VIBE_ON_PAGING
-  vibes_short_pulse();
-#endif
 }
 
 /* ---------------- clicks ---------------- */
@@ -281,7 +276,6 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
   if (got_root || got_wo) {
     s_loaded = true;
     stats_save_cache();
-    cards_reveal(s_card[s_front]); /* bars grow to the new numbers */
     if (s_req_timer) {
       app_timer_cancel(s_req_timer);
       s_req_timer = NULL;
@@ -333,7 +327,7 @@ static void window_disappear(Window *w) {
 
 static void window_unload(Window *w) {
   (void)w;
-  cards_cancel_reveal();
+  cards_warp_cancel();
   anim_cancel();
   layer_destroy(s_seam);
   layer_destroy(s_card[0]);

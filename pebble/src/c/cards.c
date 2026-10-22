@@ -10,11 +10,25 @@
 #define CUE_Y 202
 #define STEP_GOAL 10000
 
-/* 0..1000 reveal progress applied to bars, stage segments, the HR marker and
- * the active pip. At rest it is 1000, so the settled card is pixel-identical. */
-static int s_reveal_pm = 1000;
-static Animation *s_reveal;
-static Layer *s_reveal_target;
+/* Vertical warp in per-mille, PebbleOS-style squash-and-stretch. The card's
+ * whole layout (cap height, hero glyph heights, slot positions, bars) scales
+ * about the cap's bottom edge, so the card arrives rubbery instead of rigid.
+ * At rest it is 0, which makes every warped coordinate an identity. */
+static int s_warp_pm;
+static Animation *s_warp;
+static Layer *s_warp_target;
+
+static int wcap(void) {
+  int v = CAP_H + (CAP_H * s_warp_pm) / 2000; /* the band itself stretches half as much */
+  return v < 12 ? 12 : v;
+}
+
+static int wy(int y) { return wcap() + ((y - CAP_H) * (1000 + s_warp_pm)) / 1000; }
+
+static int wh(int height) {
+  int v = (height * (1000 + s_warp_pm)) / 1000;
+  return v < 1 ? 1 : v;
+}
 
 static GFont s_f_title;
 static GFont s_f_body;
@@ -98,10 +112,10 @@ static int scale(int value, int pm) { return (int)(((int64_t)value * pm) / 1000)
 
 static void draw_pips(GContext *ctx, int w, int card) {
   int x = w - 10 - 34;
+  const int baseline = (wcap() * 18) / CAP_H; /* pips ride the stretched band */
   for (int i = 0; i < 4; i++) {
-    /* the active pip blooms 5px -> 7px with the reveal */
-    int s = (i == card) ? 5 + scale(2, s_reveal_pm) : 5;
-    fill(ctx, (i == card) ? GColorWhite : CAP_DIM[card], GRect(x, 18 - s, s, s));
+    int s = (i == card) ? 7 : 5;
+    fill(ctx, (i == card) ? GColorWhite : CAP_DIM[card], GRect(x, baseline - s, s, s));
     x += s + 4;
   }
 }
@@ -110,8 +124,9 @@ static void draw_parts(GContext *ctx, int y, int w, const int v[4], const GColor
   int bw = w - 2 * X_INSET;
   int total = 0;
   for (int i = 0; i < 4; i++) total += v[i];
+  const int y0 = wy(y), bh = wh(BAR_H);
   if (total <= 0) {
-    fill(ctx, GColorLightGray, GRect(X_INSET, y, bw, BAR_H));
+    fill(ctx, GColorLightGray, GRect(X_INSET, y0, bw, bh));
     return;
   }
   int x = X_INSET;
@@ -119,9 +134,8 @@ static void draw_parts(GContext *ctx, int y, int w, const int v[4], const GColor
     if (v[i] <= 0) continue;
     int pw = (v[i] * bw) / total;
     if (pw < 2) pw = 2;
-    int shown = scale(pw, s_reveal_pm);
-    if (shown > 0) fill(ctx, c[i], GRect(x, y, shown, BAR_H));
-    x += shown;
+    fill(ctx, c[i], GRect(x, y0, pw, bh));
+    x += pw;
   }
 }
 
@@ -161,8 +175,8 @@ static void draw_hero(GContext *ctx, const char *text) {
         if ((fill_mask | hole_mask) & bit) {
           int p = b * 4;
           fill(ctx, (hole_mask & bit) ? GColorWhite : GColorBlack,
-               GRect(x + GLYPH[p] - 32, HERO_Y + GLYPH[p + 1] - 32,
-                     GLYPH[p + 2] - 32, GLYPH[p + 3] - 32));
+               GRect(x + GLYPH[p] - 32, wy(HERO_Y + GLYPH[p + 1] - 32), GLYPH[p + 2] - 32,
+                     wh(GLYPH[p + 3] - 32)));
         }
       }
     }
@@ -176,63 +190,60 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
   char hero[24], meta[64], tmp1[16], tmp2[16];
 
   fill(ctx, GColorWhite, GRect(0, 0, w, h));
-  fill(ctx, CAP[card], GRect(0, 0, w, CAP_H));
+  fill(ctx, CAP[card], GRect(0, 0, w, wcap()));
   /* y=1 puts the cap title ink at 11..24, matching the Alloy cards exactly. */
-  text(ctx, card_title(card), s_f_title, GColorWhite, X_INSET, 1, bw - 40, 32);
+  text(ctx, card_title(card), s_f_title, GColorWhite, X_INSET, (wcap() - CAP_H) / 2 + 1,
+       bw - 40, 32);
   draw_pips(ctx, w, card);
 
   hero_str(hero, sizeof(hero), card);
   draw_hero(ctx, hero);
 
-  text(ctx, stats_footer(), s_f_body, GColorDarkGray, X_INSET, CUE_Y, bw, 22);
+  text(ctx, stats_footer(), s_f_body, GColorDarkGray, X_INSET, wy(CUE_Y), bw, 22);
 
   if (card == CARD_STEPS) {
-    text(ctx, "steps today", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
-    fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, bw, BAR_H));
+    text(ctx, "steps today", s_f_body, GColorDarkGray, X_INSET, wy(UNIT_Y), bw, 22);
+    fill(ctx, GColorLightGray, GRect(X_INSET, wy(BAR_Y), bw, wh(BAR_H)));
     int pct = g_stats.steps > 0 ? (g_stats.steps * bw) / STEP_GOAL : 0;
     if (pct > bw) pct = bw;
-    pct = scale(pct, s_reveal_pm);
-    if (pct > 0) fill(ctx, GColorJaegerGreen, GRect(X_INSET, BAR_Y, pct, BAR_H));
+    if (pct > 0) fill(ctx, GColorJaegerGreen, GRect(X_INSET, wy(BAR_Y), pct, wh(BAR_H)));
     if (g_stats.dist_m > 0) {
       f_tenths(tmp1, sizeof(tmp1), g_stats.dist_m / 100);
       snprintf(meta, sizeof(meta), "%s km \xc2\xb7 %d cal", tmp1, g_stats.calories);
     } else {
       snprintf(meta, sizeof(meta), "-");
     }
-    text(ctx, meta, s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
+    text(ctx, meta, s_f_body, GColorBlack, X_INSET, wy(META_Y), bw, 22);
   } else if (card == CARD_SLEEP) {
     int v[4] = {g_stats.deep, g_stats.light, g_stats.rem, g_stats.awake};
-    text(ctx, "asleep", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
+    text(ctx, "asleep", s_f_body, GColorDarkGray, X_INSET, wy(UNIT_Y), bw, 22);
     draw_parts(ctx, BAR_Y, w, v, STAGE);
     char t1[8], t2[8];
     stats_clock_to(t1, sizeof(t1), g_stats.sleep_start);
     stats_clock_to(t2, sizeof(t2), g_stats.sleep_end);
     snprintf(meta, sizeof(meta), "%s -> %s", t1, t2);
-    text(ctx, meta, s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
+    text(ctx, meta, s_f_body, GColorBlack, X_INSET, wy(META_Y), bw, 22);
   } else if (card == CARD_HEART) {
-    text(ctx, "resting bpm", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
-    fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, bw, BAR_H));
+    text(ctx, "resting bpm", s_f_body, GColorDarkGray, X_INSET, wy(UNIT_Y), bw, 22);
+    fill(ctx, GColorLightGray, GRect(X_INSET, wy(BAR_Y), bw, wh(BAR_H)));
     if (g_stats.hr_max > g_stats.hr_min && g_stats.resting_hr > 0) {
       int dot = X_INSET + ((g_stats.resting_hr - g_stats.hr_min) * bw) /
                                (g_stats.hr_max - g_stats.hr_min);
       if (dot < X_INSET) dot = X_INSET;
       if (dot > X_INSET + bw) dot = X_INSET + bw;
-      /* slides out from the left edge as the card settles */
-      dot = X_INSET + scale(dot - X_INSET, s_reveal_pm);
-      fill(ctx, GColorImperialPurple, GRect(dot - 7, BAR_Y - 3, 14, 14));
+      fill(ctx, GColorImperialPurple, GRect(dot - 7, wy(BAR_Y) - 3, 14, wh(14)));
     }
     f_dash(tmp1, sizeof(tmp1), g_stats.hr_min);
     f_dash(tmp2, sizeof(tmp2), g_stats.hr_max);
     snprintf(meta, sizeof(meta), "min %s \xc2\xb7 max %s", tmp1, tmp2);
-    text(ctx, meta, s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
+    text(ctx, meta, s_f_body, GColorBlack, X_INSET, wy(META_Y), bw, 22);
   } else if (g_stats.has_workout && g_stats.wo_dur > 0) {
-    text(ctx, "duration", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
+    text(ctx, "duration", s_f_body, GColorDarkGray, X_INSET, wy(UNIT_Y), bw, 22);
     if (g_stats.wo_lo + g_stats.wo_mid + g_stats.wo_hi > 0) {
       int v[4] = {g_stats.wo_lo, g_stats.wo_mid, g_stats.wo_hi, 0};
       draw_parts(ctx, BAR_Y, w, v, ZONE);
     } else {
-      int full = scale(bw, s_reveal_pm);
-      if (full > 0) fill(ctx, GColorOrange, GRect(X_INSET, BAR_Y, full, BAR_H));
+      fill(ctx, GColorOrange, GRect(X_INSET, wy(BAR_Y), bw, wh(BAR_H)));
     }
     f_tenths(tmp1, sizeof(tmp1), g_stats.wo_dist / 100);
     f_dash(tmp2, sizeof(tmp2), g_stats.wo_avg);
@@ -243,53 +254,72 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
     } else {
       snprintf(meta, sizeof(meta), "- \xc2\xb7 %s avg \xc2\xb7 %s cal", tmp2, tmp3);
     }
-    text(ctx, meta, s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
+    text(ctx, meta, s_f_body, GColorBlack, X_INSET, wy(META_Y), bw, 22);
   } else {
-    text(ctx, "today", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
-    fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, bw, BAR_H));
+    text(ctx, "today", s_f_body, GColorDarkGray, X_INSET, wy(UNIT_Y), bw, 22);
+    fill(ctx, GColorLightGray, GRect(X_INSET, wy(BAR_Y), bw, wh(BAR_H)));
     text(ctx, "No workout", s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
   }
 }
 
-/* ---------------- reveal animation ---------------- */
+/* ---------------- warp animation ---------------- */
 
-static void reveal_update(Animation *animation, const AnimationProgress progress) {
-  (void)animation;
-  s_reveal_pm = (int)(((int64_t)progress * 1000) / ANIMATION_NORMALIZED_MAX);
-  if (s_reveal_target) layer_mark_dirty(s_reveal_target);
+/* Rubber: stretched as the card arrives, dipping slightly squashed as it lands,
+ * then back to 0. Piecewise easing so the whole shape is one animation. */
+#define WARP_START 300  /* +30% stretched as it flies in */
+#define WARP_DIP (-160) /* -16% squashed on landing */
+#define WARP_MS 380
+#define WARP_PHASE1 620 /* per-mille of the duration spent going start -> dip */
+
+static int warp_at(int p) {
+  if (p < WARP_PHASE1) {
+    int x = (p * 1000) / WARP_PHASE1;
+    int inv = 1000 - x;
+    int eased = 1000 - (int)(((int64_t)inv * inv * inv) / 1000000); /* ease-out cubic */
+    return WARP_START + ((WARP_DIP - WARP_START) * eased) / 1000;
+  }
+  int x = ((p - WARP_PHASE1) * 1000) / (1000 - WARP_PHASE1);
+  int smooth = (int)(((int64_t)x * x * (3000 - 2 * x)) / 1000000); /* smoothstep */
+  return WARP_DIP + ((0 - WARP_DIP) * smooth) / 1000;
 }
 
-static void reveal_stopped(Animation *animation, bool finished, void *context) {
+static void warp_update(Animation *animation, const AnimationProgress progress) {
+  (void)animation;
+  s_warp_pm = warp_at((int)(((int64_t)progress * 1000) / ANIMATION_NORMALIZED_MAX));
+  if (s_warp_target) layer_mark_dirty(s_warp_target);
+}
+
+static void warp_stopped(Animation *animation, bool finished, void *context) {
   (void)animation;
   (void)finished;
   (void)context;
-  s_reveal = NULL;
-  s_reveal_pm = 1000;
-  if (s_reveal_target) layer_mark_dirty(s_reveal_target);
+  s_warp = NULL;
+  s_warp_pm = 0;
+  if (s_warp_target) layer_mark_dirty(s_warp_target);
 }
 
-void cards_reveal(Layer *target) {
-  cards_cancel_reveal();
-  s_reveal_target = target;
-  s_reveal_pm = 0;
-  static const AnimationImplementation impl = {.update = reveal_update};
-  s_reveal = animation_create();
-  if (!s_reveal) {
-    s_reveal_pm = 1000;
+void cards_warp_start(Layer *target) {
+  cards_warp_cancel();
+  s_warp_target = target;
+  s_warp_pm = WARP_START;
+  static const AnimationImplementation impl = {.update = warp_update};
+  s_warp = animation_create();
+  if (!s_warp) {
+    s_warp_pm = 0;
     return;
   }
-  animation_set_implementation(s_reveal, &impl);
-  animation_set_duration(s_reveal, 260); /* outlives the 175ms push, so it lands filled */
-  animation_set_curve(s_reveal, AnimationCurveEaseOut);
-  animation_set_handlers(s_reveal, (AnimationHandlers){.stopped = reveal_stopped}, NULL);
-  animation_schedule(s_reveal);
+  animation_set_implementation(s_warp, &impl);
+  animation_set_duration(s_warp, WARP_MS);
+  animation_set_curve(s_warp, AnimationCurveLinear); /* warp_at owns the easing */
+  animation_set_handlers(s_warp, (AnimationHandlers){.stopped = warp_stopped}, NULL);
+  animation_schedule(s_warp);
 }
 
-void cards_cancel_reveal(void) {
-  if (s_reveal) {
-    animation_unschedule(s_reveal);
-    s_reveal = NULL;
+void cards_warp_cancel(void) {
+  if (s_warp) {
+    animation_unschedule(s_warp);
+    s_warp = NULL;
   }
-  s_reveal_target = NULL;
-  s_reveal_pm = 1000;
+  s_warp_target = NULL;
+  s_warp_pm = 0;
 }
