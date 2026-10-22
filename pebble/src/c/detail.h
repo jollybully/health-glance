@@ -31,6 +31,8 @@ void detail_draw(GContext *ctx, GRect bounds, int card);
 void detail_set_series(int card, const uint8_t *data, int len);
 void detail_set_workouts(const uint8_t *data, int len);
 void detail_set_day(int day_offset);
+void detail_set_request_day(void (*fn)(int day));
+bool detail_day_pending(void);
 
 /* Do we hold any chart data, and does it match what was last written to flash? */
 bool detail_has_series(void);

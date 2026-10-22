@@ -365,6 +365,23 @@ static const int REQ_DELAYS_MS[] = {400, 800, 1500, 3000, 6000, 12000};
 
 static void req_timer(void *data);
 
+/* Ask the phone for one past day's charts (detail screens cycle with Up/Down). */
+static void request_day(int day) {
+#if HG_DEMO
+  (void)day;
+#else
+  DictionaryIterator *it;
+  AppMessageResult r = app_message_outbox_begin(&it);
+  if (r != APP_MSG_OK) {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "day req not sent: %d", (int)r);
+    return;
+  }
+  dict_write_int32(it, MESSAGE_KEY_SERIES_DAY, day);
+  r = app_message_outbox_send();
+  APP_LOG(APP_LOG_LEVEL_INFO, "SERIES_DAY %d -> %d", day, (int)r);
+#endif
+}
+
 static void send_req(void) {
 #if HG_DEMO
   return;
@@ -600,6 +617,7 @@ static void window_load(Window *w) {
   layer_add_child(root, s_card[0]);
   layer_add_child(root, s_seam); /* seam on top of both cards */
   detail_init(root, b); /* the drill-down screen lives above everything */
+  detail_set_request_day(request_day);
 
 #if HG_CACHE_PROBE
   /* QA only: paint the cache state where a screenshot can read it. */

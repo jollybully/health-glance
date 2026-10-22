@@ -189,6 +189,27 @@ class HealthConnectRepository(private val context: Context) {
         )
     }
 
+    /**
+     * Series for one past day, for the watch's day cycling: hourly steps and peak
+     * HR for that calendar day. Returns empty lists when there is no data, so the
+     * watch shows "no series" rather than an invented chart.
+     */
+    suspend fun loadDaySeries(dayOffset: Int): Pair<List<Int>, List<Int>> {
+        val client = clientOrNull() ?: return emptyList<Int>() to emptyList()
+        val day = LocalDate.now(zone).minusDays(dayOffset.toLong().coerceAtLeast(0))
+        val start = day.atStartOfDay(zone).toInstant()
+        val end = day.plusDays(1).atStartOfDay(zone).toInstant()
+        return try {
+            val steps = loadHourlySteps(client, start, end, null)
+            val hr = loadHourlyHr(client, start, end, null)
+            Log.i(TAG, "day series offset=$dayOffset steps=${steps.sum()} hrHours=${hr.count { it > 0 }}")
+            steps to hr
+        } catch (e: Exception) {
+            Log.w(TAG, "day series failed for offset $dayOffset", e)
+            emptyList<Int>() to emptyList()
+        }
+    }
+
     suspend fun seedSampleData() {
         val client = clientOrNull()
             ?: throw IllegalStateException("Health Connect unavailable")

@@ -17,6 +17,12 @@ interface PebbleStatsSender {
         sendStats(stats, watches)
     suspend fun sendError(message: String, watches: List<WatchIdentifier>? = null): SendOutcome
     suspend fun sendSeries(stats: GlanceStats, watches: List<WatchIdentifier>? = null): SendOutcome
+    suspend fun sendDaySeries(
+        day: Int,
+        steps: ByteArray,
+        heart: ByteArray,
+        watches: List<WatchIdentifier>? = null,
+    ): SendOutcome
     suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>? = null): SendOutcome
     fun close()
 }
@@ -46,6 +52,16 @@ class LoggingPebbleStatsSender : PebbleStatsSender {
 
     override suspend fun sendSeries(stats: GlanceStats, watches: List<WatchIdentifier>?): SendOutcome {
         Log.i(TAG, "mock sendSeries ${SeriesCodec.describe(stats)}")
+        return SendOutcome.Ok(emptyMap())
+    }
+
+    override suspend fun sendDaySeries(
+        day: Int,
+        steps: ByteArray,
+        heart: ByteArray,
+        watches: List<WatchIdentifier>?,
+    ): SendOutcome {
+        Log.i(TAG, "mock sendDaySeries day=$day steps=${steps.size} hr=${heart.size}")
         return SendOutcome.Ok(emptyMap())
     }
 
@@ -82,6 +98,22 @@ class PebbleKitStatsSender(context: Context) : PebbleStatsSender {
     override suspend fun sendSeries(stats: GlanceStats, watches: List<WatchIdentifier>?): SendOutcome {
         Log.i(TAG, "sendSeries ${SeriesCodec.describe(stats)}")
         return transmit(seriesDictionary(stats), watches)
+    }
+
+    /** Answer a climb-back request with one past day's charts. */
+    override suspend fun sendDaySeries(
+        day: Int,
+        steps: ByteArray,
+        heart: ByteArray,
+        watches: List<WatchIdentifier>?,
+    ): SendOutcome {
+        Log.i(TAG, "sendDaySeries day=$day steps=${steps.size}B hr=${heart.size}B")
+        val dict: PebbleDictionary = mapOf(
+            MessageKeys.SERIES_DAY to PebbleDictionaryItem.UInt32(day.toLong().coerceAtLeast(0).toUInt()),
+            MessageKeys.STEPS_SERIES to PebbleDictionaryItem.Bytes(steps),
+            MessageKeys.HR_SERIES to PebbleDictionaryItem.Bytes(heart),
+        )
+        return transmit(dict, watches)
     }
 
     override suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>?): SendOutcome {

@@ -57,6 +57,8 @@ static int s_wo_len;
 static int s_day;        /* 0 today, 1 yesterday ... */
 static bool s_live;      /* heart screen showing the strap instead of the graph */
 static bool s_dirty;     /* series changed since the last flash write */
+static int s_waiting_day = -1; /* day asked of the phone, -1 = none */
+static void (*s_request_day)(int day);
 static bool s_any;       /* any series has arrived at all */
 
 static bool live_fresh(void) {
@@ -144,7 +146,11 @@ static void draw_steps(GContext *ctx) {
       peak_hour = i;
     }
   }
-  frame(ctx, CARD_D_STEPS, s_day == 0 ? "today" : "earlier");
+  char ctxw[14];
+  if (s_day == 0) snprintf(ctxw, sizeof ctxw, "today");
+  else if (s_day == 1) snprintf(ctxw, sizeof ctxw, "yesterday");
+  else snprintf(ctxw, sizeof ctxw, "%d days ago", s_day);
+  frame(ctx, CARD_D_STEPS, ctxw);
 
   if (peak > 0) {
     snprintf(a, sizeof a, "%d", peak * 100); /* series is steps/100 per hour */
@@ -174,7 +180,11 @@ static void draw_steps(GContext *ctx) {
 
 static void draw_sleep(GContext *ctx) {
   char a[32], t1[8], t2[8];
-  frame(ctx, CARD_D_SLEEP, s_day == 0 ? "last night" : "earlier");
+  char ctxs[14];
+  if (s_day == 0) snprintf(ctxs, sizeof ctxs, "last night");
+  else if (s_day == 1) snprintf(ctxs, sizeof ctxs, "night before");
+  else snprintf(ctxs, sizeof ctxs, "%d nights ago", s_day);
+  frame(ctx, CARD_D_SLEEP, ctxs);
   snprintf(a, sizeof a, "%d", g_stats.deep);
   cards_hero_text(ctx, a, HERO_Y);
   label_left(ctx, "deep sleep", GColorDarkGray, UNIT_Y);
@@ -436,6 +446,16 @@ void detail_close(void) {
 
 bool detail_up(void) {
   if (s_card < 0) return false;
+  /* Older day on the screens that show one day at a time. */
+  if (s_card == CARD_D_STEPS || s_card == CARD_D_SLEEP) {
+    if (s_day < 29 && s_request_day) {
+      s_day++;
+      s_waiting_day = s_day;
+      layer_mark_dirty(s_layer);
+      s_request_day(s_day);
+    }
+    return true;
+  }
   if (s_card == CARD_D_WORKOUTS && wo_count() > 1) {
     s_cursor = (s_cursor - 1 + wo_count()) % wo_count();
     layer_mark_dirty(s_layer);
@@ -453,6 +473,15 @@ bool detail_up(void) {
 
 bool detail_down(void) {
   if (s_card < 0) return false;
+  if (s_card == CARD_D_STEPS || s_card == CARD_D_SLEEP) {
+    if (s_day > 0 && s_request_day) {
+      s_day--;
+      s_waiting_day = s_day;
+      layer_mark_dirty(s_layer);
+      s_request_day(s_day);
+    }
+    return true;
+  }
   if (s_card == CARD_D_WORKOUTS && wo_count() > 1) {
     s_cursor = (s_cursor + 1) % wo_count();
     layer_mark_dirty(s_layer);
@@ -491,8 +520,13 @@ void detail_set_workouts(const uint8_t *data, int len) {
 
 void detail_set_day(int day_offset) {
   s_day = day_offset;
+  if (day_offset == s_waiting_day) s_waiting_day = -1;
   detail_redraw();
 }
+
+void detail_set_request_day(void (*fn)(int day)) { s_request_day = fn; }
+
+bool detail_day_pending(void) { return s_waiting_day >= 0 && s_waiting_day == s_day; }
 
 /* ---------------- persistence ---------------- */
 

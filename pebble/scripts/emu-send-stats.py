@@ -137,6 +137,18 @@ def main():
         def on_message(tid, app_uuid, data):
             seen.append(data)
             print("watch -> phone:", dict(data), flush=True)
+            if K["SERIES_DAY"] in data:
+                # mirror the companion: answer with that day's charts, scaled down
+                day = int(data[K["SERIES_DAY"]])
+                scale = max(1, day + 1)
+                steps = bytes(min(255, v // scale) for v in STEPS_BYTES)
+                hr = bytes(max(40, v - day * 3) for v in HR_BYTES)
+                service.send_message(target, {
+                    K["SERIES_DAY"]: Uint32(day),
+                    K["STEPS_SERIES"]: ByteArray(steps),
+                    K["HR_SERIES"]: ByteArray(hr),
+                })
+                print("answered SERIES_DAY %d" % day, flush=True)
             if K["STATS_REQ"] in data:
                 service.send_message(target, PAYLOAD)
                 time.sleep(0.25)
