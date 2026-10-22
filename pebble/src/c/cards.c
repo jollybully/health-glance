@@ -2,7 +2,7 @@
 
 #define CAP_H 36
 #define X_INSET 10
-#define HERO_Y 28
+#define HERO_Y 44
 #define UNIT_Y 106
 #define BAR_Y 136
 #define BAR_H 8
@@ -11,7 +11,6 @@
 #define STEP_GOAL 10000
 
 static GFont s_f_title;
-static GFont s_f_hero;
 static GFont s_f_body;
 
 /* 64-colour palette picks closest to the RGB values the Alloy app used. */
@@ -26,7 +25,6 @@ static const GColor ZONE[4] = {GColorRajah, GColorOrange, GColorDarkCandyAppleRe
 
 void cards_init(void) {
   s_f_title = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
-  s_f_hero = fonts_get_system_font(FONT_KEY_LECO_60_BOLD_NUMBERS_AM_PM);
   s_f_body = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
 }
 
@@ -117,6 +115,51 @@ static void draw_parts(GContext *ctx, int y, int w, const int v[4], const GColor
   }
 }
 
+
+/* The original hero: 13 strokes (x,y,w,h +32), then 12 fill masks and 12 hole
+ * masks, 7 bits per byte — the packed-glyph table from the Alloy app, ported
+ * verbatim so the big blocky digits are identical. Digits advance 36 px. */
+static const uint8_t GLYPH[100] = {
+     34,  34,  62,  42,  34,  54,  62,  42,  34,  74,  62,  42,
+     34,  34,  42,  62,  34,  54,  42,  62,  54,  34,  42,  62,
+     54,  54,  42,  62,  54,  34,  42,  82,  44,  34,  42,  82,
+     34,  34,  62,  82,  44,  44,  42,  62,  44,  44,  42,  42,
+     44,  64,  42,  42,  32,  36,  32,  34,  87,  32,  39,  33,
+     42,  33, 111,  32, 111,  32,  33,  33,  32,  36,  47,  33,
+     32,  80,  34,  32,  32,  40,  32,  32,  32,  32,  32,  32,
+     32,  32,  32,  32,  32,  64,  32,  32,  32,  80,  32,  48,
+     32,  32,  32,  32,
+};
+
+static void draw_hero(GContext *ctx, const char *text) {
+  int x = X_INSET;
+  for (int i = 0; text[i]; i++) {
+    int ch = (unsigned char)text[i];
+    int g = -1;
+    if (ch >= '0' && ch <= '9') {
+      g = ch - '0';
+    } else if (ch == ':') {
+      g = 10;
+    } else if (ch == '-') {
+      g = 11;
+    }
+    if (g >= 0) {
+      int fill_mask = (GLYPH[52 + g * 2] - 32) | ((GLYPH[53 + g * 2] - 32) << 7);
+      int hole_mask = (GLYPH[76 + g * 2] - 32) | ((GLYPH[77 + g * 2] - 32) << 7);
+      for (int b = 0; b < 13; b++) {
+        int bit = 1 << b;
+        if ((fill_mask | hole_mask) & bit) {
+          int p = b * 4;
+          fill(ctx, (hole_mask & bit) ? GColorWhite : GColorBlack,
+               GRect(x + GLYPH[p] - 32, HERO_Y + GLYPH[p + 1] - 32,
+                     GLYPH[p + 2] - 32, GLYPH[p + 3] - 32));
+        }
+      }
+    }
+    x += 36;
+  }
+}
+
 void cards_draw(GContext *ctx, GRect bounds, int card) {
   const int w = bounds.size.w, h = bounds.size.h;
   const int bw = w - 2 * X_INSET;
@@ -124,11 +167,12 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
 
   fill(ctx, GColorWhite, GRect(0, 0, w, h));
   fill(ctx, CAP[card], GRect(0, 0, w, CAP_H));
-  text(ctx, card_title(card), s_f_title, GColorWhite, X_INSET, 3, bw - 40, 30);
+  /* y=1 puts the cap title ink at 11..24, matching the Alloy cards exactly. */
+  text(ctx, card_title(card), s_f_title, GColorWhite, X_INSET, 1, bw - 40, 32);
   draw_pips(ctx, w, card);
 
   hero_str(hero, sizeof(hero), card);
-  text(ctx, hero, s_f_hero, GColorBlack, X_INSET, HERO_Y, bw, 64);
+  draw_hero(ctx, hero);
 
   text(ctx, stats_footer(), s_f_body, GColorDarkGray, X_INSET, CUE_Y, bw, 22);
 

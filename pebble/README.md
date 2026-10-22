@@ -2,7 +2,7 @@
 
 Native **C** watch app for Health Glance — minimal 4-card deck on Pebble Time 2 (Emery).
 
-**UI:** Steps · Sleep · Heart · Workout. LECO 60 Bold hero numbers + Gothic Bold 24/18. Shared title/hero/unit slots (no side breadcrumbs).
+**UI:** Steps · Sleep · Heart · Workout. Big packed-glyph hero digits (the original Alloy fillRect font, ported to C) + Gothic Bold 24/18. Shared title/hero/unit slots (no side breadcrumbs).
 
 Stats come from the Android companion (`../android`) via PebbleKit AppMessages. There is no PKJS.
 
@@ -63,7 +63,7 @@ wscript           build (adds -DHG_DEMO)
 package.json      UUID, companionApp package, messageKeys
 ```
 
-Pixel layout (200×228): cap 36 px; hero y=28 (glyph top 46), unit y=106, bar y=136 h=8, meta y=178, footer y=202, inset x=10. Cap colours are exact 64-palette matches to the old RGB: JaegerGreen / CobaltBlue / ImperialPurple / Orange.
+Pixel layout (200×228): cap 36 px; hero y=44 (glyph top 46, 36 px advance), unit y=106, bar y=136 h=8, meta y=178, footer y=202, inset x=10. Cap colours are exact 64-palette matches to the old RGB: JaegerGreen / CobaltBlue / ImperialPurple / Orange.
 
 ## Contract with the companion (do not change)
 
