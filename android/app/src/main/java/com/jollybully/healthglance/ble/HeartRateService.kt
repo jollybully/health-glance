@@ -43,10 +43,10 @@ class HeartRateService : Service(), HeartRateClient.Listener {
         private const val TAG = "HealthGlance"
         private const val CHANNEL_ID = "live_hr"
         private const val NOTIFICATION_ID = 41
-        private const val PUBLISH_INTERVAL_MS = 5_000L
-        private const val PUBLISH_DELTA_BPM = 3
+        private const val PUBLISH_INTERVAL_MS = 2_000L
+        private const val PUBLISH_DELTA_BPM = 2
         private const val RECONNECT_DELAY_MS = 15_000L
-        private const val SMOOTHING_WINDOW = 5
+        private const val SMOOTHING_WINDOW = 3
 
         const val ACTION_START = "com.jollybully.healthglance.LIVE_HR_START"
         const val ACTION_STOP = "com.jollybully.healthglance.LIVE_HR_STOP"

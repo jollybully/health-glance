@@ -399,6 +399,56 @@ class HealthConnectRepository(private val context: Context) {
         client.insertRecords(records)
     }
 
+    /**
+     * Delete every record this app itself wrote (the old "seed sample data"
+     * control). Health Connect only lets an app delete records it authored, which
+     * is exactly the scope we want: nothing of his real data is touched.
+     *
+     * Returns how many records were removed.
+     */
+    suspend fun deleteOwnRecords(): Int {
+        val client = clientOrNull() ?: return 0
+        val own = setOf(DataOrigin(packageName()))
+        val start = Instant.parse("2000-01-01T00:00:00Z")
+        val end = Instant.now().plusSeconds(86_400)
+        var removed = 0
+        suspend fun <T : androidx.health.connect.client.records.Record> purge(
+            type: kotlin.reflect.KClass<T>,
+        ) {
+            val ids = try {
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = type,
+                        timeRangeFilter = TimeRangeFilter.between(start, end),
+                        dataOriginFilter = own,
+                    ),
+                ).records.mapNotNull { it.metadata.id }
+            } catch (e: Exception) {
+                Log.w(TAG, "read own $type failed", e)
+                return
+            }
+            if (ids.isEmpty()) return
+            try {
+                client.deleteRecords(type, ids, emptyList())
+                removed += ids.size
+                Log.i(TAG, "deleted ${ids.size} own $type")
+            } catch (e: Exception) {
+                Log.w(TAG, "delete own $type failed", e)
+            }
+        }
+        purge(StepsRecord::class)
+        purge(DistanceRecord::class)
+        purge(TotalCaloriesBurnedRecord::class)
+        purge(ActiveCaloriesBurnedRecord::class)
+        purge(HeartRateRecord::class)
+        purge(SleepSessionRecord::class)
+        purge(ExerciseSessionRecord::class)
+        Log.i(TAG, "deleteOwnRecords removed=$removed")
+        return removed
+    }
+
+    private fun packageName(): String = context.packageName
+
     private fun originFilter(writer: String?): Set<DataOrigin> =
         if (writer.isNullOrBlank()) emptySet() else setOf(DataOrigin(writer))
 

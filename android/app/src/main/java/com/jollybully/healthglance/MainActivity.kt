@@ -246,7 +246,35 @@ fun CompanionScreen(
                 Text(if (busy) "Syncing…" else "Sync & push to watch")
             }
 
-                        /* The seed control is deliberately absent: it writes fabricated records
+                        /* Only deletes records THIS app authored, so his real health data is
+             * never touched. Added because the old seed control put fabricated
+             * workouts into Health Connect and they kept showing as real. */
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        status = "Removing demo data…"
+                        try {
+                            val n = repository.deleteOwnRecords()
+                            status = if (n > 0) {
+                                "Removed $n demo records this app wrote"
+                            } else {
+                                "No demo data from this app was found"
+                            }
+                            refreshNow()
+                        } catch (e: Exception) {
+                            status = "Remove failed: ${e.message ?: e.javaClass.simpleName}"
+                            busy = false
+                        }
+                    }
+                },
+                enabled = availability is HealthConnectAvailability.Available && !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Remove demo data this app wrote")
+            }
+
+            /* The seed control is deliberately absent: it writes fabricated records
              * into Health Connect with real timestamps, so a workout history would
              * report sessions that never happened. seedSampleData() remains in the
              * repository for tests only. */
