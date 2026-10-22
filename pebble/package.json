@@ -10,9 +10,7 @@
   "pebble": {
     "displayName": "Health Glance",
     "uuid": "ced3f81d-aaae-4ee4-a49c-885a247644ec",
-    "projectType": "moddable",
     "sdkVersion": "3",
-    "enableMultiJS": true,
     "targetPlatforms": [
       "emery"
     ],

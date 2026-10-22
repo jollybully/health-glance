@@ -51,8 +51,8 @@ Deck: Steps → Sleep → Heart → Workout.
 
 ```
 android/   Kotlin companion (Health Connect + PebbleKit Android 2)
-pebble/    Alloy watch app (Steps / Sleep / Heart / Workout)
-docs/      README screenshots (DEMO numbers, not live health data)
+pebble/    Native C watch app (Steps / Sleep / Heart / Workout)
+docs/      README screenshots (fixture numbers, not live health data)
 ```
 
 ## Build from source (optional)
@@ -72,12 +72,13 @@ Debug builds include a Health Connect seeder for emulator QA. Release builds are
 
 ### Watch
 
-Requires [Pebble Tool](https://developer.repebble.com) + SDK 4.17 (Moddable / Emery).
+Requires [Pebble Tool](https://developer.repebble.com) + SDK 4.17 (Emery). Native C — no Alloy/Moddable runtime.
 
 ```bash
 cd pebble
-pebble build
-pebble install --emulator emery          # set DEMO=1 in main.js for sample numbers
+pebble build                             # live build
+HG_DEMO=1 pebble build                   # fixture numbers for emulator QA
+pebble install --emulator emery
 pebble install --phone <PHONE_IP>        # live companion path
 ```
 
