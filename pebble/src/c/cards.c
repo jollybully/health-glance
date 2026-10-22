@@ -90,7 +90,16 @@ static void hero_str(char *b, size_t n, int card) {
   switch (card) {
     case CARD_STEPS: snprintf(b, n, "%d", g_stats.steps); return;
     case CARD_SLEEP: f_sleep_hero(b, n); return;
-    case CARD_HEART: f_dash(b, n, g_stats.resting_hr); return;
+    case CARD_HEART:
+      /* Live when we have it: this is the number he actually wants on the main
+       * screen. The label and cap say which number it is, so it cannot be
+       * mistaken for the resting rate. */
+      if (stats_live_fresh() && g_live.bpm > 0) {
+        f_dash(b, n, g_live.bpm);
+      } else {
+        f_dash(b, n, g_stats.resting_hr);
+      }
+      return;
     default: f_wo_time(b, n); return;
   }
 }
@@ -220,8 +229,9 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
     /* The hero stays resting bpm, so the label must say so: calling a resting
      * number "live bpm" was contradictory. The live rate belongs in the meta line,
      * where it cannot be mistaken for the hero's meaning. */
-    const bool live = stats_live_fresh();
-    text(ctx, "resting bpm", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
+    const bool live = stats_live_fresh() && g_live.bpm > 0;
+    text(ctx, live ? "live bpm" : "resting bpm", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw,
+         22);
     fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, bw, BAR_H));
     if (g_stats.hr_max > g_stats.hr_min && g_stats.resting_hr > 0) {
       int dot = X_INSET + ((g_stats.resting_hr - g_stats.hr_min) * bw) /
@@ -231,8 +241,9 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
       fill(ctx, GColorImperialPurple, GRect(dot - 7, BAR_Y - 3, 14, 14));
     }
     if (live) {
-      snprintf(meta, sizeof(meta), "live %d \xc2\xb7 min %d max %d", g_live.bpm, g_stats.hr_min,
-               g_stats.hr_max);
+      f_dash(tmp1, sizeof(tmp1), g_stats.hr_min);
+      f_dash(tmp2, sizeof(tmp2), g_stats.hr_max);
+      snprintf(meta, sizeof(meta), "min %s \xc2\xb7 max %s", tmp1, tmp2);
     } else {
       f_dash(tmp1, sizeof(tmp1), g_stats.hr_min);
       f_dash(tmp2, sizeof(tmp2), g_stats.hr_max);

@@ -5,6 +5,7 @@
 #include "anim.h"
 #include "mockups.h"
 #include "detail.h"
+#include "pulse.h"
 
 #ifndef HG_CACHE_PROBE
 #define HG_CACHE_PROBE 0
@@ -298,6 +299,7 @@ static void select_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
   if (anim_busy() || detail_is_open()) return;
+  pulse_set_visible(false); /* the detail owns the display */
   detail_open(s_card_idx);
 }
 
@@ -306,6 +308,7 @@ static void back_click(ClickRecognizerRef r, void *ctx) {
   (void)ctx;
   if (detail_is_open()) {
     detail_close();
+    pulse_set_visible(true);
     return;
   }
   /* Cancel first: the layers are destroyed in window_unload. */
@@ -574,6 +577,8 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
   /* Live heart rate arrives on its own, is never cached, and the Heart screen is
    * usually open while it streams: repaint or the number never moves. */
   if (got_live) {
+    /* the frame beats at the strap's rate while the deck is showing */
+    pulse_set_bpm(stats_live_fresh() ? g_live.bpm : 0);
     if (detail_is_open()) detail_redraw();
     layer_mark_dirty(s_card[s_front]);
   }
@@ -624,6 +629,7 @@ static void window_load(Window *w) {
   layer_add_child(root, s_card[1]);
   layer_add_child(root, s_card[0]);
   layer_add_child(root, s_seam); /* seam on top of both cards */
+  pulse_init(root, b);  /* live-rate frame, under the detail screen */
   detail_init(root, b); /* the drill-down screen lives above everything */
   detail_set_request_day(request_day);
 
@@ -675,6 +681,7 @@ static void window_unload(Window *w) {
   }
   cards_warp_cancel();
   anim_cancel();
+  pulse_deinit();
   detail_deinit();
   layer_destroy(s_seam);
   layer_destroy(s_card[0]);

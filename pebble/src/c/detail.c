@@ -328,32 +328,43 @@ static void draw_workouts(GContext *ctx) {
   snprintf(a, sizeof a, n > 1 ? "%d recent" : "this week", n);
   frame(ctx, CARD_D_WORKOUTS, a);
 
-  /* Which column the chosen session occupies. A weekly bar can stand for two
-   * sessions on the same day, so the bar alone cannot say "this one": the block
-   * on the rail beneath it is the unambiguous cue, and the bar goes black as
-   * confirmation. */
-  int sel_col = -1;
+  /* One bar per session, not per day. A weekly chart cannot show which of two
+   * sessions on the same day is selected, which is exactly what he reported as
+   * bad UX: the highlight had nowhere unambiguous to go. Bars now map 1:1 to the
+   * sessions Up/Down walks, so the black bar and the block under it always say
+   * which one is on screen. */
   if (n > 0) {
-    int secs, dist, avg, days;
-    wo_entry(s_cursor, &secs, &dist, &avg, &days);
-    sel_col = wo_column(days);
-  }
-
-  if (s_has_series[CARD_D_WORKOUTS]) {
+    int peak = 0;
+    for (int i = 0; i < n; i++) {
+      int secs, dist, avg, days;
+      wo_entry(i, &secs, &dist, &avg, &days);
+      if (secs > peak) peak = secs;
+    }
+    if (peak < 60) peak = 60;
+    const int pitch = BW / (n > 0 ? n : 1);
+    const int bw = pitch > 10 ? 10 : pitch - 2;
+    for (int i = 0; i < n; i++) {
+      int secs, dist, avg, days;
+      wo_entry(i, &secs, &dist, &avg, &days);
+      int h = (secs * (BAR_Y - 2 - CHART_TOP)) / peak;
+      if (h < 3) h = 3;
+      int x = X_INSET + i * pitch;
+      bar(ctx, x, bw, h, i == s_cursor ? GColorBlack : GColorOrange);
+      if (i == s_cursor) {
+        /* the block on the rail: position, so selection is not shade-dependent */
+        fill(ctx, GColorBlack, GRect(x - 1, BAR_Y, bw + 2, BAR_H));
+      }
+    }
+  } else if (s_has_series[CARD_D_WORKOUTS]) {
+    /* no session history: fall back to the weekly minutes chart */
     for (int i = 0; i < 7; i++) {
       int x = X_INSET + i * 26;
       int m = s_series[CARD_D_WORKOUTS][i];
       if (m <= 0) {
-        fill(ctx, GColorLightGray, GRect(x, BAR_Y - 2, 16, 2)); /* rest day */
+        fill(ctx, GColorLightGray, GRect(x, BAR_Y - 2, 16, 2));
         continue;
       }
-      bar(ctx, x, 16, (m * (BAR_Y - 2 - CHART_TOP)) / 90,
-          i == sel_col ? GColorBlack : GColorOrange);
-    }
-    if (sel_col >= 0) {
-      /* a filled block over the rail: position, not just a shade difference */
-      int x = X_INSET + sel_col * 26;
-      fill(ctx, GColorBlack, GRect(x - 1, BAR_Y, 18, BAR_H));
+      bar(ctx, x, 16, (m * (BAR_Y - 2 - CHART_TOP)) / 90, GColorOrange);
     }
   }
 
