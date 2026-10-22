@@ -29,6 +29,7 @@ static bool s_from_cache;
 static bool s_have_last;
 static CacheBlob s_last;
 
+#if !HG_DEMO
 static void blob_from_stats(CacheBlob *b) {
   memset(b, 0, sizeof(*b)); /* deterministic padding: the change check memcmps */
   b->magic = CACHE_MAGIC;
@@ -57,6 +58,7 @@ static void blob_from_stats(CacheBlob *b) {
   snprintf(b->sleep_end, sizeof(b->sleep_end), "%s", g_stats.sleep_end);
   snprintf(b->wo_title, sizeof(b->wo_title), "%s", g_stats.wo_title);
 }
+#endif /* !HG_DEMO */
 
 static void stats_from_blob(const CacheBlob *b) {
   g_stats.steps = b->steps;

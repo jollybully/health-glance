@@ -3,6 +3,7 @@
 #include "stats.h"
 #include "cards.h"
 #include "anim.h"
+#include "mockups.h"
 
 #ifndef HG_TOUCH_SELFTEST
 #define HG_TOUCH_SELFTEST 0
@@ -18,6 +19,42 @@ static int s_front;   /* index of the visible card layer */
 static int s_card_idx; /* card currently shown */
 static int s_w, s_h;
 static bool s_loaded; /* an inbox push has filled the stats */
+
+#if HG_MOCKUP
+/* Mockup mode: Up/Down walk the drill-down concepts, nothing else runs. */
+static int s_mock;
+static Layer *s_mock_layer;
+
+static void mock_update(Layer *l, GContext *ctx) {
+  mockups_draw(ctx, layer_get_bounds(l), s_mock);
+}
+
+static void mock_redraw(void) {
+  if (s_mock_layer) layer_mark_dirty(s_mock_layer);
+}
+
+static void mock_up(ClickRecognizerRef r, void *ctx) {
+  (void)r;
+  (void)ctx;
+  s_mock = (s_mock + 1) % mockups_count();
+  APP_LOG(APP_LOG_LEVEL_INFO, "mockup %d", s_mock);
+  mock_redraw();
+}
+
+static void mock_down(ClickRecognizerRef r, void *ctx) {
+  (void)r;
+  (void)ctx;
+  s_mock = (s_mock + mockups_count() - 1) % mockups_count();
+  APP_LOG(APP_LOG_LEVEL_INFO, "mockup %d", s_mock);
+  mock_redraw();
+}
+
+static void mock_back(ClickRecognizerRef r, void *ctx) {
+  (void)r;
+  (void)ctx;
+  window_stack_pop_all(true);
+}
+#endif
 
 /* ---------------- card layers ---------------- */
 
@@ -260,6 +297,12 @@ static void back_click(ClickRecognizerRef r, void *ctx) {
 
 static void click_config(void *ctx) {
   (void)ctx;
+#if HG_MOCKUP
+  window_single_click_subscribe(BUTTON_ID_UP, mock_up);
+  window_single_click_subscribe(BUTTON_ID_DOWN, mock_down);
+  window_single_click_subscribe(BUTTON_ID_BACK, mock_back);
+  return;
+#endif
   window_single_click_subscribe(BUTTON_ID_UP, up_click);
   window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
   window_single_click_subscribe(BUTTON_ID_BACK, back_click);
@@ -275,10 +318,12 @@ static void click_config(void *ctx) {
  * one lost request must not leave the watch empty for half an hour. */
 static AppTimer *s_req_timer;
 static int s_tries;
+#if !HG_DEMO
 /* Escalating, not machine-gun: every STATS_REQ makes the phone re-read Health
  * Connect, so six asks spread over ~25s is the budget. */
 static const int REQ_DELAYS_MS[] = {400, 800, 1500, 3000, 6000, 12000};
 #define REQ_MAX_TRIES ((int)(sizeof(REQ_DELAYS_MS) / sizeof(REQ_DELAYS_MS[0])))
+#endif
 
 static void req_timer(void *data);
 
@@ -470,6 +515,13 @@ static void window_load(Window *w) {
   s_w = b.size.w;
   s_h = b.size.h;
 
+#if HG_MOCKUP
+  s_mock_layer = layer_create(b);
+  layer_set_update_proc(s_mock_layer, mock_update);
+  layer_add_child(root, s_mock_layer);
+  return;
+#endif
+
   s_card[0] = make_card_layer(GRect(0, 0, s_w, s_h), s_card_idx);
   s_card[1] = make_card_layer(GRect(0, 0, s_w, s_h), 0);
   layer_set_hidden(s_card[1], true);
@@ -490,12 +542,18 @@ static void window_load(Window *w) {
 
 static void window_appear(Window *w) {
   (void)w;
+#if HG_MOCKUP
+  return;
+#endif
   start_req_loop();
   if (touch_service_is_enabled()) touch_service_subscribe(touch_handler, NULL);
 }
 
 static void window_disappear(Window *w) {
   (void)w;
+#if HG_MOCKUP
+  return;
+#endif
   touch_service_unsubscribe();
   if (s_req_timer) {
     app_timer_cancel(s_req_timer);
@@ -505,6 +563,13 @@ static void window_disappear(Window *w) {
 
 static void window_unload(Window *w) {
   (void)w;
+#if HG_MOCKUP
+  if (s_mock_layer) {
+    layer_destroy(s_mock_layer);
+    s_mock_layer = NULL;
+  }
+  return;
+#endif
   if (s_launch) {
     animation_unschedule(s_launch);
     s_launch = NULL;

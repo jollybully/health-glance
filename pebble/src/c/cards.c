@@ -97,8 +97,6 @@ static void hero_str(char *b, size_t n, int card) {
 
 /* ---------------- chrome ---------------- */
 
-static int scale(int value, int pm) { return (int)(((int64_t)value * pm) / 1000); }
-
 static void draw_pips(GContext *ctx, int w, int card) {
   int x = w - 10 - 34;
   const int baseline = 18;
@@ -180,7 +178,7 @@ static void draw_hero(GContext *ctx, const char *text) {
 void cards_draw(GContext *ctx, GRect bounds, int card) {
   const int w = bounds.size.w, h = bounds.size.h;
   const int bw = w - 2 * X_INSET;
-  char hero[24], meta[64], tmp1[16], tmp2[16];
+  char hero[24], meta[128], tmp1[16], tmp2[16];
 
   fill(ctx, GColorWhite, GRect(0, 0, w, h));
   fill(ctx, CAP[card], GRect(0, 0, w, CAP_H));
