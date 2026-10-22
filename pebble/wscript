@@ -33,6 +33,7 @@ def build(ctx):
     demo = os.environ.get('HG_DEMO', '0')
     touch_test = os.environ.get('HG_TOUCH_SELFTEST', '0')
     mockup = os.environ.get('HG_MOCKUP', '0')
+    mark = os.environ.get('HG_MARK', '0')
     for platform in ctx.env.TARGET_PLATFORMS:
         ctx.env = ctx.all_envs[platform]
         ctx.set_group(ctx.env.PLATFORM_NAME)
@@ -40,6 +41,7 @@ def build(ctx):
         ctx.env.append_value('CFLAGS', ['-DHG_DEMO={}'.format(demo)])
         ctx.env.append_value('CFLAGS', ['-DHG_TOUCH_SELFTEST={}'.format(touch_test)])
         ctx.env.append_value('CFLAGS', ['-DHG_MOCKUP={}'.format(mockup)])
+        ctx.env.append_value('CFLAGS', ['-DHG_MARK={}'.format(mark)])
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
         ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c'), target=app_elf, bin_type='app')
 

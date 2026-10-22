@@ -24,6 +24,13 @@
 #include "cards.h"
 #include "stats.h"
 
+/* HG_MARK picks how a detail screen announces itself (QA comparison builds):
+ *   0 none            1 "A" page rule under the cap
+ *   2 "B+C" chevron   3 chevron + rule                                    */
+#ifndef HG_MARK
+#define HG_MARK 0
+#endif
+
 #define X_INSET 10
 #define CAP_H 36
 #define HERO_Y 44
@@ -69,11 +76,31 @@ static void frame(GContext *ctx, int screen) {
   static const char *titles[4] = {"STEPS", "SLEEP", "HEART", "WORKOUTS"};
   fill(ctx, GColorWhite, GRect(0, 0, 200, 228));
   fill(ctx, CAP_COL[screen], GRect(0, 0, 200, CAP_H));
+#if HG_MARK == 1 || HG_MARK == 3
+  fill(ctx, GColorBlack, GRect(0, CAP_H, 200, 2)); /* A: page rule the cards never have */
+#endif
   graphics_context_set_text_color(ctx, GColorWhite);
+#if HG_MARK == 2 || HG_MARK == 3
+  /* B: chevron + indented title; the pips are the deck's paging cue and a detail
+   * screen isn't paging, so nothing sits on the right of the title any more. */
+  graphics_draw_text(ctx, "<", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                     GRect(2, 6, 12, 20), GTextOverflowModeTrailingEllipsis,
+                     GTextAlignmentLeft, NULL);
+  graphics_draw_text(ctx, titles[screen], fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+                     GRect(14, 1, BW - 60, 32), GTextOverflowModeTrailingEllipsis,
+                     GTextAlignmentLeft, NULL);
+#else
   graphics_draw_text(ctx, titles[screen], fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
                      GRect(X_INSET, 1, BW - 60, 32), GTextOverflowModeTrailingEllipsis,
                      GTextAlignmentLeft, NULL);
+#endif
   fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, BW, BAR_H));
+#if HG_MARK == 2 || HG_MARK == 3
+  /* C: slot dividers turn the card's progress bar into a chart scale */
+  for (int x = X_INSET + 8; x < X_INSET + BW; x += 8) {
+    fill(ctx, GColorWhite, GRect(x, BAR_Y, 1, BAR_H));
+  }
+#endif
 }
 
 static void context(GContext *ctx, const char *s) {
