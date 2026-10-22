@@ -61,11 +61,7 @@ static int s_waiting_day = -1; /* day asked of the phone, -1 = none */
 static void (*s_request_day)(int day);
 static bool s_any;       /* any series has arrived at all */
 
-static bool live_fresh(void) {
-  /* HR_LIVE_TS is seconds; give it 20s before calling it live */
-  if (g_live.bpm <= 0 || g_live.ts == 0) return false;
-  return (time(NULL) - (time_t)g_live.ts) <= 20;
-}
+static bool live_fresh(void) { return stats_live_fresh(); }
 
 static void fill(GContext *ctx, GColor c, GRect r) {
   graphics_context_set_fill_color(ctx, c);

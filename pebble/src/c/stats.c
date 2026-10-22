@@ -146,6 +146,11 @@ void stats_save_cache(void) {
 
 bool stats_is_cached(void) { return s_from_cache; }
 
+bool stats_live_fresh(void) {
+  if (g_live.bpm <= 0 || g_live.ts == 0) return false;
+  return (time(NULL) - (time_t)g_live.ts) <= 20;
+}
+
 void stats_init(void) {
   memset(&g_stats, 0, sizeof(g_stats));
   strcpy(g_stats.status, "Waiting for phone");

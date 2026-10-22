@@ -214,6 +214,13 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
     snprintf(meta, sizeof(meta), "%s -> %s", t1, t2);
     text(ctx, meta, s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
   } else if (card == CARD_HEART) {
+    /* While the strap streams, the card says so: a filled pip in the cap plus the
+     * live rate in the meta line. The hero stays resting bpm so the card keeps
+     * meaning what it always meant. */
+    /* The hero stays resting bpm, so the label must say so: calling a resting
+     * number "live bpm" was contradictory. The live rate belongs in the meta line,
+     * where it cannot be mistaken for the hero's meaning. */
+    const bool live = stats_live_fresh();
     text(ctx, "resting bpm", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
     fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, bw, BAR_H));
     if (g_stats.hr_max > g_stats.hr_min && g_stats.resting_hr > 0) {
@@ -223,9 +230,14 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
       if (dot > X_INSET + bw) dot = X_INSET + bw;
       fill(ctx, GColorImperialPurple, GRect(dot - 7, BAR_Y - 3, 14, 14));
     }
-    f_dash(tmp1, sizeof(tmp1), g_stats.hr_min);
-    f_dash(tmp2, sizeof(tmp2), g_stats.hr_max);
-    snprintf(meta, sizeof(meta), "min %s \xc2\xb7 max %s", tmp1, tmp2);
+    if (live) {
+      snprintf(meta, sizeof(meta), "live %d \xc2\xb7 min %d max %d", g_live.bpm, g_stats.hr_min,
+               g_stats.hr_max);
+    } else {
+      f_dash(tmp1, sizeof(tmp1), g_stats.hr_min);
+      f_dash(tmp2, sizeof(tmp2), g_stats.hr_max);
+      snprintf(meta, sizeof(meta), "min %s \xc2\xb7 max %s", tmp1, tmp2);
+    }
     text(ctx, meta, s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
   } else if (g_stats.has_workout && g_stats.wo_dur > 0) {
     text(ctx, "duration", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);

@@ -32,6 +32,10 @@ typedef struct {
 
 extern LiveHr g_live;
 
+/* True while the last strap sample is fresh (20s): a stale reading must never be
+ * presented as live. */
+bool stats_live_fresh(void);
+
 void stats_init(void);
 /* Short "HH:MM" view of an ISO timestamp, same slicing rules as the JS app. */
 const char *stats_clock(const char *v);

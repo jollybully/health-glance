@@ -97,6 +97,18 @@ SERIES_PAYLOAD = {
 }
 
 
+if "--live-only" in sys.argv:
+    # exactly what HeartRateService sends: six keys, nothing else
+    PAYLOAD = {
+        K["HR_LIVE"]: Uint32(131),
+        K["HR_LIVE_TS"]: Uint32(int(time.time())),
+        K["HR_LIVE_BATT"]: Uint32(84),
+        K["HR_LIVE_STATE"]: Uint32(3),
+        K["HR_LIVE_MIN"]: Uint32(61),
+        K["HR_LIVE_MAX"]: Uint32(148),
+    }
+    SERIES_PAYLOAD = {}
+
 SERIES_KEYS = {"STEPS_SERIES", "SLEEP_SERIES", "HR_SERIES", "WO_SERIES", "WO_HIST",
                "HR_LIVE", "HR_LIVE_TS", "HR_LIVE_BATT", "HR_LIVE_STATE",
                "HR_LIVE_MIN", "HR_LIVE_MAX", "SERIES_DAY"}
@@ -152,7 +164,8 @@ def main():
             if K["STATS_REQ"] in data:
                 service.send_message(target, PAYLOAD)
                 time.sleep(0.25)
-                service.send_message(target, SERIES_PAYLOAD)
+                if SERIES_PAYLOAD:
+                    service.send_message(target, SERIES_PAYLOAD)
                 print("answered STATS_REQ with %d keys + series" % len(PAYLOAD), flush=True)
 
         service.register_handler("appmessage", on_message)
@@ -163,7 +176,8 @@ def main():
 
     service.send_message(target, PAYLOAD)
     time.sleep(0.25)
-    service.send_message(target, SERIES_PAYLOAD)
+    if SERIES_PAYLOAD:
+        service.send_message(target, SERIES_PAYLOAD)
     time.sleep(1.5)
     print("pushed %d keys + %d series keys -> %s" % (len(PAYLOAD), len(SERIES_PAYLOAD), target))
 

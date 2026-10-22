@@ -463,7 +463,7 @@ static void copy_str(char *dst, Tuple *t) {
 static void inbox_received(DictionaryIterator *it, void *ctx) {
   (void)ctx;
   Stats *s = &g_stats;
-  bool got_root = false, got_wo = false;
+  bool got_root = false, got_wo = false, got_live = false;
   char title[ST_LEN];
   title[0] = '\0';
 
@@ -526,6 +526,7 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
       s->wo_hi = iv;
     } else if (k == MESSAGE_KEY_HR_LIVE) {
       g_live.bpm = iv;
+      got_live = true;
     } else if (k == MESSAGE_KEY_HR_LIVE_TS) {
       g_live.ts = (uint32_t)iv;
     } else if (k == MESSAGE_KEY_HR_LIVE_BATT) {
@@ -534,6 +535,7 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
       g_live.state = iv;
     } else if (k == MESSAGE_KEY_HR_LIVE_MIN) {
       g_live.min = iv;
+      got_live = true;
     } else if (k == MESSAGE_KEY_HR_LIVE_MAX) {
       g_live.max = iv;
     } else if (k == MESSAGE_KEY_SERIES_DAY) {
@@ -569,6 +571,12 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
   APP_LOG(APP_LOG_LEVEL_INFO, "inbox root=%d wo=%d steps=%d", (int)got_root, (int)got_wo,
           s->steps);
   if (got_wo) s->has_workout = true;
+  /* Live heart rate arrives on its own, is never cached, and the Heart screen is
+   * usually open while it streams: repaint or the number never moves. */
+  if (got_live) {
+    if (detail_is_open()) detail_redraw();
+    layer_mark_dirty(s_card[s_front]);
+  }
   /* The charts travel as their own AppMessage, so a series-only message has to
    * count as data arriving — without this the cache was never written for them. */
   if (got_root || got_wo || detail_has_series()) {
