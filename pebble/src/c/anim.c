@@ -117,7 +117,89 @@ void anim_retreat(Layer *incoming, Layer *outgoing, Layer *seam, int dir, int w,
   begin(incoming, outgoing, seam, dir, w, h, done, ctx, true);
 }
 
+/* ---------------- end-of-deck spring ---------------- */
+
+/* PebbleOS answers a scroll that has nowhere to go: the content leans, comes back
+ * past its resting place a little, and settles. Three stages, because the SDK has
+ * no spring curve and chaining is more honest than faking one. */
+#ifndef SPRING_SCALE
+#define SPRING_SCALE 1 /* HG_SPRING_SCALE slows the spring down for capture */
+#endif
+#define SPRING_LEAN_MS (90 * SPRING_SCALE)
+#define SPRING_RETURN_MS (130 * SPRING_SCALE)
+#define SPRING_SETTLE_MS (90 * SPRING_SCALE)
+
+typedef struct {
+  Layer *l;
+  Animation *stage;
+  AnimDone done;
+  void *ctx;
+  int w, h, overshoot;
+  bool cancelled;
+} Spring;
+
+static Spring s_spring;
+static bool s_spring_busy;
+
+static void spring_settle_stopped(Animation *a, bool finished, void *ctx);
+static void spring_return_stopped(Animation *a, bool finished, void *ctx);
+
+static void spring_settle_stopped(Animation *a, bool finished, void *ctx) {
+  (void)a; (void)finished; (void)ctx;
+  if (s_spring.cancelled) return;
+  s_spring.stage = NULL;
+  layer_set_frame(s_spring.l, GRect(0, 0, s_spring.w, s_spring.h));
+  layer_mark_dirty(s_spring.l);
+  s_spring_busy = false;
+  if (s_spring.done) s_spring.done(s_spring.ctx);
+}
+
+static void spring_return_stopped(Animation *a, bool finished, void *ctx) {
+  (void)a; (void)finished; (void)ctx;
+  if (s_spring.cancelled) return;
+  s_spring.stage = NULL;
+  s_spring.stage = frame_anim(s_spring.l, GRect(0, 0, s_spring.w, s_spring.h), SPRING_SETTLE_MS,
+                              AnimationCurveEaseOut);
+  animation_set_handlers(s_spring.stage, (AnimationHandlers){.stopped = spring_settle_stopped},
+                         NULL);
+  animation_schedule(s_spring.stage);
+}
+
+void anim_spring(Layer *l, int w, int h, int overshoot, AnimDone done, void *ctx) {
+  if (!l) {
+    if (done) done(ctx);
+    return;
+  }
+  s_spring.l = l;
+  s_spring.w = w;
+  s_spring.h = h;
+  s_spring.overshoot = overshoot;
+  s_spring.done = done;
+  s_spring.ctx = ctx;
+  s_spring.cancelled = false;
+  s_spring_busy = true;
+
+  /* From wherever the card is leaning now, back past centre and settle. */
+  const GRect from = layer_get_frame(l);
+  const int over = from.origin.y > 0 ? -overshoot : overshoot;
+  s_spring.stage = frame_anim(l, GRect(0, over, w, h), SPRING_RETURN_MS,
+                              AnimationCurveEaseInOut);
+  animation_set_handlers(s_spring.stage, (AnimationHandlers){.stopped = spring_return_stopped},
+                         NULL);
+  animation_schedule(s_spring.stage);
+  (void)SPRING_LEAN_MS;
+}
+
+bool anim_spring_busy(void) { return s_spring_busy; }
+
 void anim_cancel(void) {
+  s_spring.cancelled = true;
+  if (s_spring.stage) {
+    animation_unschedule(s_spring.stage);
+    s_spring.stage = NULL;
+  }
+  if (s_spring.l) layer_set_frame(s_spring.l, GRect(0, 0, s_spring.w, s_spring.h));
+  s_spring_busy = false;
   s_push.cancelled = true;
   if (s_push.a_in) animation_unschedule(s_push.a_in);
   if (s_push.a_out) animation_unschedule(s_push.a_out);

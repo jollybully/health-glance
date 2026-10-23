@@ -205,6 +205,25 @@ static void drag_retreat_done(void *ctx) {
   layer_mark_dirty(s_card[s_front]);
 }
 
+/* How far the card leans when a gesture has nowhere to go. */
+#define LEAN_PX 16
+/* Finger drags lean with resistance rather than following one-to-one, so the end
+ * of the deck feels like a stretched band instead of a dead zone. */
+#define LEAN_MAX_PX 28
+#define LEAN_EXIT_PX 22
+
+static int s_rubber;      /* current lean, px */
+static bool s_rubbering;  /* the drag found no card and is leaning instead */
+
+static void rubber_apply(int dy) {
+  int off = (dy * 30) / 100; /* 70% resistance */
+  if (off > LEAN_MAX_PX) off = LEAN_MAX_PX;
+  if (off < -LEAN_MAX_PX) off = -LEAN_MAX_PX;
+  s_rubber = off;
+  layer_set_frame(s_card[s_front], GRect(0, off, s_w, s_h));
+  layer_mark_dirty(s_card[s_front]);
+}
+
 static void touch_handler(const TouchEvent *event, void *context) {
   (void)context;
   if (!event) return;
@@ -213,6 +232,8 @@ static void touch_handler(const TouchEvent *event, void *context) {
     s_drag = false;
     s_drag_dir = 0;
     s_drag_dy = 0;
+    s_rubber = 0;
+    s_rubbering = false;
     if (anim_busy()) return; /* let the running page turn finish */
     s_drag = true;
     s_drag_x0 = event->x;
@@ -229,7 +250,16 @@ static void touch_handler(const TouchEvent *event, void *context) {
       if (dy > -DRAG_START_PX && dy < DRAG_START_PX) return;
       if (dy < 0 ? -dy <= (dx < 0 ? -dx : dx) : dy <= (dx < 0 ? -dx : dx)) return; /* too horizontal */
       drag_pick_direction(dy > 0 ? -1 : 1);
-      if (s_drag_dir == 0) return; /* at an end: no card to pull in */
+      if (s_drag_dir == 0) {
+        /* No card that way: lean against the end of the deck. */
+        s_rubbering = true;
+        rubber_apply(dy);
+        return;
+      }
+    }
+    if (s_rubbering) {
+      rubber_apply(dy);
+      return;
     }
     drag_apply(dy);
     return;
@@ -237,6 +267,22 @@ static void touch_handler(const TouchEvent *event, void *context) {
 
   if (event->type == TouchEvent_Liftoff) {
     s_drag = false;
+
+    if (s_rubbering) {
+      s_rubbering = false;
+      const int lean = s_rubber;
+      s_rubber = 0;
+      /* Pulled down hard at the first card: that is the way home, same as the
+       * Down button. Anything less springs back. */
+      if (lean >= LEAN_EXIT_PX && s_card_idx == 0) {
+        anim_cancel();
+        window_stack_pop_all(true);
+        return;
+      }
+      anim_spring(s_card[s_front], s_w, s_h, LEAN_PX / 2, NULL, NULL);
+      return;
+    }
+
     if (s_drag_dir == 0) return;
     int travel = s_drag_dir < 0 ? s_drag_dy : -s_drag_dy;
     int in = 1 - s_front;
@@ -297,14 +343,26 @@ static void selftest_long_click(ClickRecognizerRef r, void *ctx) {
 static void up_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  if (s_card_idx < CARD_COUNT - 1) push(s_card_idx + 1, -1); /* next card enters from the top */
+  if (anim_busy() || anim_spring_busy()) return;
+  if (s_card_idx < CARD_COUNT - 1) {
+    push(s_card_idx + 1, -1); /* next card enters from the top */
+    return;
+  }
+  /* Nothing above Workouts: the deck should still answer the press. */
+  layer_set_frame(s_card[s_front], GRect(0, -LEAN_PX, s_w, s_h));
+  anim_spring(s_card[s_front], s_w, s_h, LEAN_PX / 2, NULL, NULL);
 }
 
 static void down_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  if (anim_busy()) return; /* let the push settle before acting on the deck */
-  if (s_card_idx == 0) return; /* Back is the only way out of the app */
+  if (anim_busy() || anim_spring_busy()) return; /* let the deck settle first */
+  if (s_card_idx == 0) {
+    /* Quick launched from Up, so Down at the first card goes home. */
+    anim_cancel();
+    window_stack_pop_all(true);
+    return;
+  }
   push(s_card_idx - 1, 1); /* previous card enters from the bottom */
 }
 

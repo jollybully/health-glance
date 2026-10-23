@@ -93,10 +93,14 @@ leaves.
 
 | Where | Up | Down | Swipe | Select | Back |
 | --- | --- | --- | --- | --- | --- |
-| Deck | next card | previous card | up = next, down = previous, following the drag | — | exit to watchface |
+| Deck | next card | previous card; **Down on Steps goes home** | up = next, down = previous, following the drag | — | exit to watchface |
 
 Swiping drags the card with your finger and lets go into the same page turn the buttons
 use, so touch and buttons are one gesture vocabulary rather than two behaviours.
+
+Both ends of the deck answer back instead of going dead: pressing Up on Workouts, or
+swiping past either end, leans the card against the edge, over-corrects slightly and
+settles. At Steps a firm pull downwards takes you home, the same as the Down button.
 
 That's genuinely all of it. Back is the only way out, so you can never leave the app by accident
 while reading a number.

@@ -46,6 +46,9 @@ def build(ctx):
         ctx.env.append_value('CFLAGS', ['-DHG_LAUNCH_HOLD={}'.format(os.environ.get('HG_LAUNCH_HOLD', '0'))])
         ctx.env.append_value('CFLAGS', ['-DHG_MARK={}'.format(mark)])
         ctx.env.append_value('CFLAGS', ['-DHG_CACHE_PROBE={}'.format(os.environ.get('HG_CACHE_PROBE', '0'))])
+        # HG_SPRING_SCALE>1 slows the end-of-deck spring down so it can be
+        # photographed; the shipped value is 1.
+        ctx.env.append_value('CFLAGS', ['-DSPRING_SCALE={}'.format(os.environ.get('HG_SPRING_SCALE', '1'))])
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
         ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c'), target=app_elf, bin_type='app')
 
