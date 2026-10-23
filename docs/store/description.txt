@@ -1,0 +1,24 @@
+Four numbers from your phone's Health Connect, on your wrist, at a glance: steps, sleep, heart
+rate and your last workout. Swipe or use the buttons to move between the cards.
+
+Health Glance is deliberately small. There are no charts to scroll, no days to page back
+through and no settings on the watch. Each card carries one number you can read mid-stride,
+with the detail that fits underneath it.
+
+Your step goal is set in the companion app, because Health Connect stores steps but has no
+concept of a target.
+
+If you have a chest strap or a watch that broadcasts the standard Bluetooth heart-rate service,
+the Heart card shows your live pulse, and the edge of the screen beats with it. The reading
+comes from the phone, which is the only device in the chain that can talk to a strap.
+
+Requires the Health Glance companion app for Android (sideloaded from the project's releases
+page). The companion reads Health Connect with read-only permissions: nine READ permissions,
+zero WRITE. Your data goes from your phone to your watch and nowhere else — there is no account,
+no server and no analytics.
+
+Health Connect needs Android 8 or newer; it is built into Android 14 and installs as an app on
+Android 13 and below.
+
+Notes: watch app is native C for the Pebble Time 2 (Emery), 22 KB. Workouts shows the most
+recent session only.

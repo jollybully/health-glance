@@ -1,0 +1,10 @@
+The step goal is now yours to set in the companion app, and the ends of the deck answer back.
+
+- Daily step goal is a setting: a number field in the companion, clamped 500-100,000, pushed to
+  the watch on save and cached there.
+- Down on Steps goes home, the way a quick-launched app should be left.
+- Pressing Up on Workouts, or dragging past either end, leans the card and settles it instead of
+  going dead.
+
+Upgrading from 1.0.0: install both halves. The watch cache moved to v2 to hold the goal, so the
+first launch shows "no data" until the companion pushes once.
