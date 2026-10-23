@@ -61,10 +61,20 @@ Deliberately absent: charts to scroll, days to page back through, settings to co
 
 ## Install
 
+### Downloads
+
+Both halves are always served from the latest release, so these URLs are stable and safe to link:
+
+| File | Direct link |
+| --- | --- |
+| Watch app | <https://github.com/jollybully/health-glance/releases/latest/download/health-glance-c.pbw> |
+| Android companion | <https://github.com/jollybully/health-glance/releases/latest/download/health-glance-companion.apk> |
+
+Or browse [Releases](../../releases) for notes and previous versions.
+
 ### 1. The watch app
 
-Grab `health-glance-c.pbw` from [Releases](../../releases) and install it with Core's developer
-sideload, or:
+Install `health-glance-c.pbw` with Core's developer sideload, or:
 
 ```bash
 pebble install --phone <PHONE_IP>
@@ -72,7 +82,8 @@ pebble install --phone <PHONE_IP>
 
 ### 2. The companion
 
-Sideload `health-glance-companion.apk` (package `com.jollybully.healthglance`; enable "install
+Sideload [`health-glance-companion.apk`](https://github.com/jollybully/health-glance/releases/latest/download/health-glance-companion.apk)
+(package `com.jollybully.healthglance`; enable "install
 unknown sources" when prompted). Then open **Health Glance**:
 
 1. **Grant Health Connect permissions** — read-only access to steps, sleep, heart rate, exercise.

@@ -26,8 +26,19 @@ Source: <https://developer.repebble.com/guides/appstore-publishing/preparing-a-s
 - **Website URL:** https://github.com/jollybully/health-glance
 - **Source code URL:** https://github.com/jollybully/health-glance
 - **Visibility:** Listed
-- **Companion app:** *Android only, sideloaded — no Play Store listing, so leave this blank.* Naming it
-  without a store URL would promise a download that does not exist.
+- **Companion app:** the dashboard asks for a name, a Play Store URL and a 144×144 icon. There is no
+  Play Store listing — the APK is sideloaded from GitHub — so use the stable release asset URL and say
+  plainly that it is a direct download:
+
+  | Field | Value |
+  | --- | --- |
+  | Name | `Health Glance companion (Android)` |
+  | URL | `https://github.com/jollybully/health-glance/releases/latest/download/health-glance-companion.apk` |
+  | Icon | `icon-large-144.png` (same file as the app icon) |
+
+  That URL resolves to whatever `health-glance-companion.apk` the newest release carries, so it does not
+  go stale. Leave the field empty instead if the dashboard rejects a non-Play-Store URL — a broken
+  companion link is worse than none.
 
 ### Description (paste as plain text)
 
