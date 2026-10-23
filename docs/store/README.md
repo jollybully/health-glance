@@ -1,5 +1,10 @@
 # Pebble appstore submission — Health Glance 1.0.1
 
+> **LIVE:** <https://apps.repebble.com/c74e59961a004ec5ab8c72bd> (app id `c74e59961a004ec5ab8c72bd`,
+> UUID `ced3f81d-aaae-4ee4-a49c-885a247644ec`). Published 2026-10-23 with the CLI, listed, emery only.
+> Two follow-ups live in the dashboard, not here: the developer display name renders as **Unknown**
+> (account profile), and the category cannot be changed once created — it was submitted as `health`.
+
 Everything the listing needs, in the order the Developer Dashboard asks for it.
 Source: <https://developer.repebble.com/guides/appstore-publishing/preparing-a-submission/>
 
@@ -85,7 +90,9 @@ spec explicitly disallows framing them.
 <https://developer.repebble.com>, click **New**, upload the `.pbw`, then fill the fields above and
 upload the images. No review queue: it is live on submit.
 
-**Command line** — needs a Pebble account sign-in first, which is why this step is the owner's:
+**Command line** — needs a Pebble account sign-in first, which is why this step is the owner's.
+Pass `--category health`, not "Health & Fitness": the API only accepts `daily|tools|notifications|remotes|health|games`
+and answers a 500 for anything else, which is how the first six attempts failed.
 
 ```bash
 cd pebble
@@ -93,7 +100,7 @@ pebble login                # opens a browser; Google, GitHub or Apple
 pebble publish --non-interactive \
   --name "Health Glance" \
   --description "$(cat ../docs/store/description.txt)" \
-  --category "Health & Fitness" \
+  --category health \
   --source https://github.com/jollybully/health-glance \
   --version 1.0.1 \
   --icon-small ../docs/store/icon-small-80.png \
