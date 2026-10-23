@@ -27,6 +27,10 @@ Two things worth knowing before you try it:
 Store link: https://apps.repebble.com/c74e59961a004ec5ab8c72bd
 Companion app + source: https://github.com/jollybully/health-glance
 
+Full disclosure: this is vibe coded slop. Both halves were written with AI agents under my
+direction and then tested on real hardware, which is why it works and also why there is no
+settings screen.
+
 If you've got a PT2 and Health Connect, I'd mainly like to know whether the swipe paging
 feels right and whether any of the four cards shows you something wrong. Screenshots of a
 card that disagrees with your phone are the most useful bug report I can get.

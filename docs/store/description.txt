@@ -1,26 +1,23 @@
-Four numbers from your phone's Health Connect, on your wrist, at a glance: steps, sleep, heart
-rate and your last workout. Swipe or use the buttons to move between the cards.
+I wanted to see my Fitbit Air data on my Pebble, and I didn't want to use the watch's own health
+stuff. So I vibed this out to solve that problem. We truly are living in an age of digital
+abundance.
 
-Health Glance is deliberately small. There are no charts to scroll, no days to page back
-through and no settings on the watch. Each card carries one number you can read mid-stride,
-with the detail that fits underneath it.
+Four cards: steps, sleep, heart rate and your last workout, straight from Health Connect. One big
+number on each, the useful detail underneath, and a swipe or a button to move between them.
 
-Your step goal is set in the companion app, because Health Connect stores steps but has no
-concept of a target.
+It's deliberately small. No charts, no paging back through days, nothing to set up on the watch.
+I had all of that in an earlier build and never once read it on a wrist.
 
-If you have a chest strap or a watch that broadcasts the standard Bluetooth heart-rate service,
-the Heart card shows your live pulse, and the edge of the screen beats with it. The reading
-comes from the phone, which is the only device in the chain that can talk to a strap.
+Got a chest strap, or a watch set to broadcast the standard Bluetooth heart-rate service? The Heart
+card shows your live pulse and the screen edge beats with it, at your actual rate. It stops the
+moment samples go stale rather than passing off an old number as live.
 
-Requires the Health Glance companion app for Android (sideloaded from the project's releases
-page). The companion reads Health Connect with read-only permissions: nine READ permissions,
-zero WRITE. Your data goes from your phone to your watch and nowhere else — there is no account,
-no server and no analytics.
+Needs the Android companion app, sideloaded from the project's releases page, because the watch
+can't talk to a strap or to Health Connect on its own. Read-only permissions, no account, no server,
+no analytics: it goes phone to watch and stops there.
 
-Health Connect needs Android 8 or newer; it is built into Android 14 and installs as an app on
-Android 13 and below.
+Health Connect wants Android 8 or newer. The watch app is native C for the Pebble Time 2 (Emery),
+22 KB, and the layout is built around that screen, so it's Emery only for now.
 
-Notes: watch app is native C for the Pebble Time 2 (Emery), 22 KB. Workouts shows the most
-recent session only.
-
-Vibe coded. The watch app and the Android companion were both written with AI agents under human direction, then tested on real hardware. Every screenshot in this listing is a real capture from the watch.
+Warning: certified vibe coded slop. Written with AI agents under human direction, then tested on
+real hardware. Every screenshot here is a real capture from the watch.
