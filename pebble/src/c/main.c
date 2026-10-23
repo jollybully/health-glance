@@ -71,11 +71,10 @@ static void card_update(Layer *l, GContext *ctx) {
 #if HG_SQUASH_PROBE
   /* QA only: hold a fixed squash so the deformation can be measured against the
    * identity frame instead of argued about from a moving animation. */
-  cards_draw_squash(ctx, layer_get_bounds(l), d->card, 1000 * 1000 / HG_SQUASH_PROBE,
-                    HG_SQUASH_PROBE);
+  cards_draw_warp(ctx, layer_get_bounds(l), d->card, HG_SQUASH_PROBE);
   return;
 #endif
-  cards_draw_squash(ctx, layer_get_bounds(l), d->card, d->pm_x, d->pm_y);
+  cards_draw_warp(ctx, layer_get_bounds(l), d->card, d->lag);
 }
 
 static void seam_update(Layer *l, GContext *ctx) {
@@ -87,8 +86,7 @@ static Layer *make_card_layer(GRect frame, int card) {
   Layer *l = layer_create_with_data(frame, sizeof(CardLayer));
   CardLayer *d = (CardLayer *)layer_get_data(l);
   d->card = card;
-  d->pm_x = 1000;
-  d->pm_y = 1000;
+  d->lag = 0;
   layer_set_update_proc(l, card_update);
   return l;
 }

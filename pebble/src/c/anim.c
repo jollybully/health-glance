@@ -15,25 +15,20 @@
 #define TRAVEL_MS ANIM_MS
 #define SETTLE_MS 200
 
-/* Squash and stretch, volume preserved: a card that compresses vertically gets
- * wider by the same ratio, which is what stops deformation reading as a zoom.
- * pm_y < 1000 is a squash, > 1000 a stretch. */
-static void squash_apply(Layer *l, int pm_y) {
+/* The card's contents trail its frame by `lag` px, distributed down the card by
+ * the warp field in cards.c. Positive lag drags the content down, negative pulls
+ * it up; zero is at rest. This is the timeline's trick — the contents move on
+ * their own curve rather than being scaled with the card. */
+static void lag_apply(Layer *l, int lag) {
   if (!l) return;
   CardLayer *d = (CardLayer *)layer_get_data(l);
   if (!d) return;
-  d->pm_y = pm_y;
-  d->pm_x = (1000 * 1000) / (pm_y > 0 ? pm_y : 1000);
+  d->lag = lag;
   layer_mark_dirty(l);
 }
 
-static void squash_reset(Layer *l) {
-  if (!l) return;
-  CardLayer *d = (CardLayer *)layer_get_data(l);
-  if (!d) return;
-  d->pm_x = 1000;
-  d->pm_y = 1000;
-  layer_mark_dirty(l);
+static void lag_reset(Layer *l) {
+  lag_apply(l, 0);
 }
 
 typedef struct {
@@ -93,33 +88,49 @@ static void travel_stopped(Animation *a, bool finished_travel, void *ctx) {
   finish();
 }
 
-/* 0 -> 600: the arriving card is still compressed at the seam edge and stretches
- * as it fills the screen. 600 -> 1000: it overshoots slightly tall, then settles.
- * The departing card does the opposite, so the pair reads as one rubber sheet
- * being pulled through the frame. */
-static int incoming_pm_y(int p) {
-  if (p < 600) return 880 + ((1120 - 880) * p) / 600;
-  return 1120 - (120 * (p - 600)) / 400;
+/* How far the contents trail, as a fraction of LAG_PX, over the life of a page
+ * turn (p in 0..1000). It snaps out to full lag almost immediately — the card
+ * leaves its content behind — then the content catches up, overshoots past rest
+ * in the other direction, and settles. The overshoot is what makes it read as
+ * elastic instead of as a slide. */
+#define LAG_PX 34
+
+static int lag_shape(int p) {
+  int f; /* per mille of LAG_PX, may be negative */
+  if (p < 200) {
+    f = (p * 1000) / 200;
+  } else if (p < 600) {
+    f = 1000 - ((p - 200) * 500) / 400;
+  } else if (p < 800) {
+    f = 500 - ((p - 600) * 750) / 200; /* crosses zero: the overshoot */
+  } else {
+    f = -250 + ((p - 800) * 250) / 200;
+  }
+  return (LAG_PX * f) / 1000;
 }
 
 static void squash_update(Animation *a, const AnimationProgress progress) {
   (void)a;
-  int p = (int)(((int64_t)progress * 1000) / ANIMATION_NORMALIZED_MAX);
+  const int p = (int)(((int64_t)progress * 1000) / ANIMATION_NORMALIZED_MAX);
+  /* Both cards trail the same way: one continuous sheet being pulled through the
+   * frame, rather than two independent objects. */
+  const int sign = s_push.dir > 0 ? 1 : -1;
+  const int lag = sign * lag_shape(p);
   if (s_push.retreat) {
-    /* the drag did not commit: unfurl the incoming card as it leaves */
-    squash_apply(s_push.l_in, incoming_pm_y(p));
-    squash_apply(s_push.l_out, 1000);
+    /* the drag did not commit, so the content unfurls back with the card */
+    lag_apply(s_push.l_in, (lag * (1000 - p)) / 1000);
+    lag_apply(s_push.l_out, 0);
     return;
   }
-  squash_apply(s_push.l_in, incoming_pm_y(p));
-  squash_apply(s_push.l_out, 1000 - (120 * p) / 1000);
+  lag_apply(s_push.l_in, lag);
+  lag_apply(s_push.l_out, (lag * 3) / 4); /* the departing card trails a little less */
 }
 
 static void squash_stopped(Animation *a, bool finished, void *ctx) {
   (void)a; (void)finished; (void)ctx;
   s_push.a_squash = NULL;
-  squash_reset(s_push.l_in);
-  squash_reset(s_push.l_out);
+  lag_reset(s_push.l_in);
+  lag_reset(s_push.l_out);
 }
 
 static void start_stage(void) {
@@ -144,8 +155,8 @@ static void start_stage(void) {
   animation_set_handlers(s_push.a_in, (AnimationHandlers){.stopped = travel_stopped}, NULL);
 
   static const AnimationImplementation squash_impl = {.update = squash_update};
-  squash_apply(s_push.l_in, incoming_pm_y(0));
-  squash_apply(s_push.l_out, 1000);
+  lag_apply(s_push.l_in, 0);
+  lag_apply(s_push.l_out, 0);
   s_push.a_squash = animation_create();
   if (s_push.a_squash) {
     animation_set_implementation(s_push.a_squash, &squash_impl);
@@ -187,12 +198,15 @@ void anim_retreat(Layer *incoming, Layer *outgoing, Layer *seam, int dir, int w,
 }
 
 void anim_squash_drag(Layer *incoming, Layer *outgoing, int dy, int h) {
-  int travel = dy < 0 ? -dy : dy;
-  if (travel > h) travel = h;
-  /* up to ~9% compression at a full-screen pull */
-  int pm_y = 1000 - (travel * 90) / (h > 0 ? h : 1);
-  squash_apply(incoming, pm_y);
-  squash_apply(outgoing, 1000 - (travel * 45) / (h > 0 ? h : 1));
+  /* The content trails the finger, which is what makes the card feel attached to
+   * the glass rather than to the pointer. Capped at LAG_PX so a long pull cannot
+   * smear the layout. */
+  int lag = (dy * 34) / 100;
+  if (lag > LAG_PX) lag = LAG_PX;
+  if (lag < -LAG_PX) lag = -LAG_PX;
+  (void)h;
+  lag_apply(incoming, lag);
+  lag_apply(outgoing, (lag * 3) / 4);
 }
 
 /* ---------------- landing squash ---------------- */
@@ -208,14 +222,14 @@ static Settle s_settle;
 
 static void settle_update(Animation *a, const AnimationProgress progress) {
   (void)a;
-  int p = (int)(((int64_t)progress * 1000) / ANIMATION_NORMALIZED_MAX);
-  squash_apply(s_settle.l, incoming_pm_y(p));
+  const int p = (int)(((int64_t)progress * 1000) / ANIMATION_NORMALIZED_MAX);
+  lag_apply(s_settle.l, lag_shape(p));
 }
 
 static void settle_stopped(Animation *a, bool finished, void *ctx) {
   (void)a; (void)finished; (void)ctx;
   s_settle.a = NULL;
-  squash_reset(s_settle.l);
+  lag_reset(s_settle.l);
   if (s_settle.done) s_settle.done(s_settle.ctx);
 }
 
@@ -227,11 +241,11 @@ void anim_squash_settle(Layer *l, AnimDone done, void *ctx) {
   static const AnimationImplementation impl = {.update = settle_update};
   s_settle.a = animation_create();
   if (!s_settle.a) {
-    squash_reset(l);
+    lag_reset(l);
     if (done) done(ctx);
     return;
   }
-  squash_apply(l, incoming_pm_y(0));
+  lag_apply(l, 0);
   animation_set_implementation(s_settle.a, &impl);
   animation_set_duration(s_settle.a, SETTLE_MS);
   animation_set_curve(s_settle.a, AnimationCurveLinear);
@@ -243,8 +257,8 @@ void anim_cancel(void) {
   s_push.cancelled = true;
   if (s_push.a_squash) animation_unschedule(s_push.a_squash);
   s_push.a_squash = NULL;
-  squash_reset(s_push.l_in);
-  squash_reset(s_push.l_out);
+  lag_reset(s_push.l_in);
+  lag_reset(s_push.l_out);
   if (s_push.a_in) animation_unschedule(s_push.a_in);
   if (s_push.a_out) animation_unschedule(s_push.a_out);
   if (s_push.a_seam) animation_unschedule(s_push.a_seam);

@@ -19,11 +19,15 @@ void cards_draw(GContext *ctx, GRect bounds, int card);
  * turn: 1000 is identity, so a settled card is pixel-identical to before. */
 typedef struct {
   int card;
-  int pm_x; /* horizontal scale, per mille */
-  int pm_y; /* vertical scale, per mille */
+  int lag; /* content displacement in px: how far the card's contents trail its
+            * own frame, pinned at the cap. 0 is at rest. */
 } CardLayer;
 
-void cards_draw_squash(GContext *ctx, GRect bounds, int card, int pm_x, int pm_y);
+/* Draw a card whose contents are displaced by `lag` pixels, applied
+ * proportionally to distance from the cap: the header stays bolted to the card
+ * and the bottom trails furthest, which stretches the sheet instead of scaling
+ * it. Rows that are pulled apart narrow by the same ratio. */
+void cards_draw_warp(GContext *ctx, GRect bounds, int card, int lag);
 
 /* PebbleOS-style warp: the card's layout and cap stretch then squash as it
  * arrives, so a page turn feels rubbery rather than rigid. `target` is redrawn
