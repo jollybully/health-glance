@@ -21,16 +21,22 @@ static AppTimer *s_timer;
 static int s_bpm;
 static int s_phase;      /* 0..PHASE_MAX, one full beat */
 static uint32_t s_last_push; /* time of the last live sample */
-static bool s_visible = true; /* the deck shows it; detail screens do not */
+static bool s_visible; /* only the Heart card shows the frame */
 
 static int frame_thickness(void) {
-  /* fast attack, slow decay: what a pulse looks like on a heart monitor */
-  int t = s_phase;
+  /* One cardiac cycle is a lub-dub: a strong contraction, a quick partial
+   * release, then a second softer beat and a long rest. A single bump at the
+   * right rate reads as a metronome, not as a heart. */
+  const int t = s_phase;
   int v;
-  if (t < 12) {
-    v = (t * 4) / 12;
-  } else {
-    v = 4 - ((t - 12) * 4) / (PHASE_MAX - 12);
+  if (t < 10) {          /* lub: fast in */
+    v = (t * 4) / 10;
+  } else if (t < 22) {   /* release */
+    v = 4 - ((t - 10) * 3) / 12;
+  } else if (t < 32) {   /* dub: softer second beat */
+    v = 1 + ((t - 22) * 2) / 10;
+  } else {               /* diastole: rest until the next beat */
+    v = 3 - ((t - 32) * 3) / (PHASE_MAX - 32);
   }
   if (v < 0) v = 0;
   if (v > 4) v = 4;
@@ -49,7 +55,9 @@ static void draw_frame(GContext *ctx, GRect b, int w, GColor c) {
 static void layer_update(Layer *l, GContext *ctx) {
   GRect b = layer_get_bounds(l);
   int w = frame_thickness();
-  draw_frame(ctx, b, w, GColorImperialPurple);
+  /* Black, not purple: the Heart card's own cap is purple, so a purple frame was
+   * invisible on the one card that carries it. */
+  draw_frame(ctx, b, w, GColorBlack);
   /* a thin white inner edge at the peak of the beat, so it reads as a pulse and
    * not just a growing border */
   if (s_phase < 10) {
@@ -74,6 +82,12 @@ static void stop(void) {
     layer_set_hidden(s_layer, true);
     layer_mark_dirty(s_layer);
   }
+}
+
+/* Board the frame only for the Heart card: on any other card it is decoration
+ * that lies about which number it belongs to. */
+void pulse_set_card(int card) {
+  pulse_set_visible(card == 2 /* CARD_HEART */);
 }
 
 static void tick(void *data) {
@@ -132,6 +146,11 @@ void pulse_set_visible(bool visible) {
   if (!visible) {
     layer_set_hidden(s_layer, true);
     layer_mark_dirty(s_layer);
+  } else if (s_bpm > 0) {
+    s_phase = 0; /* start the new card on a beat, not mid-diastole */
+    layer_set_hidden(s_layer, false);
+    layer_mark_dirty(s_layer);
+    schedule();
   }
 }
 

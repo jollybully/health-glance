@@ -131,6 +131,7 @@ static void push(int to, int dir) {
     layer_set_frame(s_card[0], GRect(0, 0, s_w, s_h));
   }
 
+  pulse_set_card(to); /* the pulse belongs to the Heart card, nowhere else */
   int in = 1 - s_front, out = s_front;
   Layer *li = s_card[in], *lo = s_card[out];
 
@@ -596,7 +597,8 @@ static void window_load(Window *w) {
   layer_add_child(root, s_card[1]);
   layer_add_child(root, s_card[0]);
   layer_add_child(root, s_seam); /* seam on top of both cards */
-  pulse_init(root, b);  /* live-rate frame, under the detail screen */
+  pulse_init(root, b);  /* live-rate frame, shown on the Heart card only */
+  pulse_set_card(s_card_idx);
 
 #if HG_CACHE_PROBE
   /* QA only: paint the cache state where a screenshot can read it. */

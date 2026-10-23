@@ -13,3 +13,5 @@ void pulse_set_bpm(int bpm);
 void pulse_clear(void);
 /* Hide the pulse while a detail screen owns the display. */
 void pulse_set_visible(bool visible);
+/* Show the frame for the Heart card only. */
+void pulse_set_card(int card);

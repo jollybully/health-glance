@@ -110,7 +110,7 @@ def day_sleep(day):
 
 
 PAYLOAD.update({
-    K["HR_LIVE"]: Uint32(132),
+    K["HR_LIVE"]: Uint32(int(os.environ.get("EMU_BPM", 132))),
     K["HR_LIVE_TS"]: Uint32(int(time.time())),
     K["HR_LIVE_BATT"]: Uint32(84),
     K["HR_LIVE_STATE"]: Uint32(3),
@@ -131,7 +131,7 @@ SERIES_PAYLOAD = {
 if "--live-only" in sys.argv:
     # exactly what HeartRateService sends: six keys, nothing else
     PAYLOAD = {
-        K["HR_LIVE"]: Uint32(131),
+        K["HR_LIVE"]: Uint32(int(os.environ.get("EMU_BPM", 131))),
         K["HR_LIVE_TS"]: Uint32(int(time.time())),
         K["HR_LIVE_BATT"]: Uint32(84),
         K["HR_LIVE_STATE"]: Uint32(3),
