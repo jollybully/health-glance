@@ -47,7 +47,7 @@ Deliberately absent: charts to scroll, days to page back through, settings to co
 <img src="docs/images/pulse.gif" alt="Live heart rate with the pulse frame" width="200">
 </p>
 
-<sub>The pulse frame, captured from the watch at 30 bpm so the beat is visible as a still image.</sub>
+<sub>The pulse frame, captured frame-by-frame from the watch emulator.</sub>
 
 ## Requirements
 
@@ -91,9 +91,12 @@ On the watch: **Settings → Quick Launch → Up → Health Glance.** Then, from
 Three buttons, one grammar: Up and Down move through a list, Select acts on what is shown, Back
 leaves.
 
-| Where | Up | Down | Select | Back |
-| --- | --- | --- | --- | --- |
-| Deck | next card | previous card | — | exit to watchface |
+| Where | Up | Down | Swipe | Select | Back |
+| --- | --- | --- | --- | --- | --- |
+| Deck | next card | previous card | up = next, down = previous, following the drag | — | exit to watchface |
+
+Swiping drags the card with your finger and lets go into the same page turn the buttons
+use, so touch and buttons are one gesture vocabulary rather than two behaviours.
 
 That's genuinely all of it. Back is the only way out, so you can never leave the app by accident
 while reading a number.

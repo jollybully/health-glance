@@ -327,6 +327,7 @@ static void click_config(void *ctx) {
   window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
   window_single_click_subscribe(BUTTON_ID_BACK, back_click);
 #if HG_TOUCH_SELFTEST
+  /* QA build only: Select replays a long swipe, long-press Select a short one. */
   window_single_click_subscribe(BUTTON_ID_SELECT, selftest_click);
   window_long_click_subscribe(BUTTON_ID_SELECT, 0, selftest_long_click, NULL);
 #endif
@@ -618,7 +619,9 @@ static void window_appear(Window *w) {
   return;
 #endif
   start_req_loop();
-  if (touch_service_is_enabled()) touch_service_subscribe(touch_handler, NULL);
+  /* Touch is only present on some platforms, so ask before subscribing. */
+  touch_service_subscribe(touch_handler, NULL);
+  APP_LOG(APP_LOG_LEVEL_INFO, "touch enabled=%d", (int)touch_service_is_enabled());
 }
 
 static void window_disappear(Window *w) {
