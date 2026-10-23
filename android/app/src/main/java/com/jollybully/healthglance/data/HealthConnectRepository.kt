@@ -145,15 +145,12 @@ class HealthConnectRepository(private val context: Context) {
         }
 
         val stepsWeek = loadStepsWeek(client, today, writer)
-        val stepsHourly = loadHourlySteps(client, dayStart, dayEnd, writer)
         val floors = loadFloors(client, dayStart, dayEnd, writer)
 
         val sleepWeek = sleepWeekFrom(sleepRecords, today)
         val spo2 = loadSpo2(client, sleepLookback, dayEnd, writer)
         val hrv = loadHrv(client, sleepLookback, dayEnd, writer)
         val workout = loadLastWorkout(client, sleepLookback, dayEnd, writer)
-        val hrHourly = loadHourlyHr(client, dayStart, dayEnd, writer)
-        val stageSlots = loadSleepStageSlots(client, sleepLookback, dayEnd, writer)
         val history = loadWorkoutHistory(client, sleepLookback, dayEnd, writer, today)
 
         return GlanceStats(
@@ -168,13 +165,11 @@ class HealthConnectRepository(private val context: Context) {
                 restingHr = restingHr,
                 floors = floors,
                 stepsWeek = stepsWeek,
-                stepsHourly = stepsHourly,
             ),
             sleep = sleep.copy(
                 sleepWeek = sleepWeek,
                 spo2Percent = spo2,
                 hrvMs = hrv,
-                stageSlots = stageSlots,
             ),
             heart = HeartStats(
                 restingHr = restingHr,
@@ -183,7 +178,6 @@ class HealthConnectRepository(private val context: Context) {
                 zoneLow = zoneLow,
                 zoneMid = zoneMid,
                 zoneHigh = zoneHigh,
-                hrHourly = hrHourly,
             ),
             workout = workout.copy(history = history),
         )
@@ -194,82 +188,7 @@ class HealthConnectRepository(private val context: Context) {
      * HR for that calendar day. Returns empty lists when there is no data, so the
      * watch shows "no series" rather than an invented chart.
      */
-    suspend fun loadDaySeries(dayOffset: Int): DaySeries {
-        val client = clientOrNull() ?: return DaySeries()
-        val day = LocalDate.now(zone).minusDays(dayOffset.toLong().coerceAtLeast(0))
-        val start = day.atStartOfDay(zone).toInstant()
-        val end = day.plusDays(1).atStartOfDay(zone).toInstant()
-        return try {
-            val steps = loadHourlySteps(client, start, end, null)
-            val hr = loadHourlyHr(client, start, end, null)
-            /* A night's stages live between the previous evening and this morning,
-             * so ask for the window the watch is actually labelling. */
-            val slots = loadSleepStageSlots(client, start.minusSeconds(12 * 3600), end, null)
-            val night = loadNightTotals(client, start.minusSeconds(12 * 3600), end, null)
-            Log.i(
-                TAG,
-                "day series offset=$dayOffset steps=${steps.sum()} " +
-                    "hrHours=${hr.count { it > 0 }} sleepSlots=${slots.toSet().size} stages",
-            )
-            DaySeries(
-                steps = steps,
-                hr = hr,
-                sleepSlots = slots,
-                stepsTotal = steps.sum(),
-                asleepMinutes = night.first,
-                deepMinutes = night.second,
-                remMinutes = night.third,
-                hrMin = hr.filter { it > 0 }.minOrNull() ?: 0,
-                hrMax = hr.maxOrNull() ?: 0,
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "day series failed for offset $dayOffset", e)
-            DaySeries()
-        }
-    }
 
-    /**
-     * Stage totals for one night, for the past-day Sleep screen. The watch cannot
-     * derive them from 24 stage slots without inventing a night length.
-     */
-    private suspend fun loadNightTotals(
-        client: HealthConnectClient,
-        start: Instant,
-        end: Instant,
-        writer: String?,
-    ): Triple<Int, Int, Int> {
-        val sessions = try {
-            client.readRecords(
-                ReadRecordsRequest(
-                    recordType = SleepSessionRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, end),
-                ),
-            ).records
-        } catch (e: Exception) {
-            Log.w(TAG, "night totals read failed", e)
-            return Triple(0, 0, 0)
-        }
-        val chosen = WriterPicker.preferOrigin(sessions, writer) { it.metadata.dataOrigin.packageName }
-        val session = chosen.maxByOrNull {
-            Duration.between(it.startTime, it.endTime).toMinutes()
-        } ?: return Triple(0, 0, 0)
-        var deep = 0L
-        var rem = 0L
-        var asleep = 0L
-        for (s in session.stages) {
-            val mins = Duration.between(s.startTime, s.endTime).toMinutes()
-            when (s.stage) {
-                SleepSessionRecord.STAGE_TYPE_DEEP -> { deep += mins; asleep += mins }
-                SleepSessionRecord.STAGE_TYPE_REM -> { rem += mins; asleep += mins }
-                SleepSessionRecord.STAGE_TYPE_LIGHT -> asleep += mins
-                else -> Unit
-            }
-        }
-        if (asleep == 0L) {
-            asleep = Duration.between(session.startTime, session.endTime).toMinutes()
-        }
-        return Triple(asleep.toInt(), deep.toInt(), rem.toInt())
-    }
 
     suspend fun seedSampleData() {
         val client = clientOrNull()
@@ -681,33 +600,6 @@ class HealthConnectRepository(private val context: Context) {
         return out
     }
 
-    private suspend fun loadHourlySteps(
-        client: HealthConnectClient,
-        dayStart: Instant,
-        dayEnd: Instant,
-        writer: String?,
-    ): List<Int> {
-        val out = MutableList(24) { 0 }
-        try {
-            val groups = client.aggregateGroupByDuration(
-                AggregateGroupByDurationRequest(
-                    metrics = setOf(StepsRecord.COUNT_TOTAL),
-                    timeRangeFilter = TimeRangeFilter.between(dayStart, dayEnd),
-                    timeRangeSlicer = Duration.ofHours(1),
-                    dataOriginFilter = originFilter(writer),
-                ),
-            )
-            for (group in groups) {
-                val hour = group.startTime.atZone(zone).hour
-                if (hour in 0..23) {
-                    out[hour] = (group.result[StepsRecord.COUNT_TOTAL] ?: 0L).toInt().coerceAtLeast(0)
-                }
-            }
-        } catch (_: Exception) {
-            // leave zeros
-        }
-        return out
-    }
 
     private suspend fun loadFloors(
         client: HealthConnectClient,
@@ -905,89 +797,11 @@ class HealthConnectRepository(private val context: Context) {
      * One paged read of today's samples; hours with no samples stay 0 so the
      * watch draws nothing rather than inventing a value.
      */
-    private suspend fun loadHourlyHr(
-        client: HealthConnectClient,
-        start: Instant,
-        end: Instant,
-        writer: String?,
-    ): List<Int> {
-        val out = MutableList(24) { 0 }
-        val records = try {
-            val all = mutableListOf<HeartRateRecord>()
-            var pageToken: String? = null
-            do {
-                val response = client.readRecords(
-                    ReadRecordsRequest(
-                        recordType = HeartRateRecord::class,
-                        timeRangeFilter = TimeRangeFilter.between(start, end),
-                        pageToken = pageToken,
-                    ),
-                )
-                all += response.records
-                pageToken = response.pageToken
-            } while (!pageToken.isNullOrEmpty())
-            all
-        } catch (e: Exception) {
-            Log.w(TAG, "hourly HR read failed", e)
-            return out
-        }
-        val chosen = WriterPicker.preferOrigin(records, writer) { it.metadata.dataOrigin.packageName }
-        for (record in chosen) {
-            for (sample in record.samples) {
-                val hour = sample.time.atZone(zone).hour
-                if (hour !in 0..23) continue
-                val bpm = sample.beatsPerMinute.toInt()
-                if (bpm > out[hour]) out[hour] = bpm
-            }
-        }
-        Log.i(TAG, "hourly HR hours=${out.count { it > 0 }}/24 peak=${out.maxOrNull() ?: 0}")
-        return out
-    }
 
     /**
      * The night as 24 equal slots, each mapped to the stage covering its midpoint
      * (0 deep, 1 light, 2 rem, 3 awake) — the shape of the watch's sleep chart.
      */
-    private suspend fun loadSleepStageSlots(
-        client: HealthConnectClient,
-        start: Instant,
-        end: Instant,
-        writer: String?,
-    ): List<Int> {
-        val slots = MutableList(24) { 1 }
-        val sessions = try {
-            client.readRecords(
-                ReadRecordsRequest(
-                    recordType = SleepSessionRecord::class,
-                    timeRangeFilter = TimeRangeFilter.between(start, end),
-                ),
-            ).records
-        } catch (e: Exception) {
-            Log.w(TAG, "sleep slots read failed", e)
-            return slots
-        }
-        val chosen = WriterPicker.preferOrigin(sessions, writer) { it.metadata.dataOrigin.packageName }
-        val session = chosen.maxByOrNull { Duration.between(it.startTime, it.endTime).toMinutes() }
-            ?: return slots
-        val totalMin = Duration.between(session.startTime, session.endTime).toMinutes().toDouble()
-        if (totalMin < 30.0 || session.stages.isEmpty()) return slots
-        for (i in slots.indices) {
-            val mid = session.startTime.plusSeconds(((i + 0.5) / 24.0 * totalMin * 60).toLong())
-            val stage = session.stages.firstOrNull { s ->
-                mid >= s.startTime && mid < s.endTime
-            } ?: continue
-            slots[i] = when (stage.stage) {
-                SleepSessionRecord.STAGE_TYPE_DEEP -> 0
-                SleepSessionRecord.STAGE_TYPE_REM -> 2
-                SleepSessionRecord.STAGE_TYPE_AWAKE,
-                SleepSessionRecord.STAGE_TYPE_OUT_OF_BED,
-                -> 3
-                else -> 1
-            }
-        }
-        Log.i(TAG, "sleep slots=${slots.joinToString("")} stages=${session.stages.size}")
-        return slots
-    }
 
     /**
      * The last seven sessions (>=2 min), newest first, for the Workouts screen.
@@ -1172,14 +986,3 @@ class HealthConnectRepository(private val context: Context) {
 }
 
 /** One past day's charts, as the watch's day cycling needs them. */
-data class DaySeries(
-    val steps: List<Int> = emptyList(),
-    val hr: List<Int> = emptyList(),
-    val sleepSlots: List<Int> = emptyList(),
-    val stepsTotal: Int = 0,
-    val asleepMinutes: Int = 0,
-    val deepMinutes: Int = 0,
-    val remMinutes: Int = 0,
-    val hrMin: Int = 0,
-    val hrMax: Int = 0,
-)

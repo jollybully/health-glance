@@ -40,16 +40,9 @@ class SyncCache(context: Context) {
     fun loadStatus(): String = prefs.getString(KEY_STATUS, "Ready") ?: "Ready"
 
     /** What the last series push contained and what the watch transport said. */
-    fun saveSeriesInfo(what: String, outcome: String) {
-        prefs.edit().putString(KEY_SERIES, "$what · $outcome").apply()
-    }
 
-    fun seriesInfo(): String = prefs.getString(KEY_SERIES, "") ?: ""
 
     /** What the last day-cycle request actually returned. */
-    fun saveDayInfo(what: String) {
-        prefs.edit().putString(KEY_DAY, what).apply()
-    }
 
     fun dayInfo(): String = prefs.getString(KEY_DAY, "") ?: ""
 
@@ -60,7 +53,6 @@ class SyncCache(context: Context) {
         private const val KEY_STATS_JSON = "stats_json"
         private const val KEY_STATUS = "status"
         private const val KEY_SAVED_AT = "saved_at"
-        private const val KEY_SERIES = "series_info"
         private const val KEY_DAY = "day_info"
 
         fun encodeStats(stats: GlanceStats): String {

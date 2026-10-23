@@ -76,19 +76,7 @@
       "HR_LIVE_BATT",
       "HR_LIVE_STATE",
       "HR_LIVE_MIN",
-      "HR_LIVE_MAX",
-      "STEPS_SERIES",
-      "SLEEP_SERIES",
-      "HR_SERIES",
-      "WO_SERIES",
-      "WO_HIST",
-      "SERIES_DAY",
-      "DAY_STEPS",
-      "DAY_SLEEP_MIN",
-      "DAY_DEEP",
-      "DAY_REM",
-      "DAY_HR_MIN",
-      "DAY_HR_MAX"
+      "HR_LIVE_MAX"
     ],
     "resources": {
       "media": []

@@ -29,7 +29,6 @@ data class SleepStats(
     /** Oldest → last night, length 7 (asleep minutes). */
     val sleepWeek: List<Int> = List(7) { 0 },
     /** Stage across the night in 24 equal slots: 0 deep, 1 light, 2 rem, 3 awake. */
-    val stageSlots: List<Int> = List(24) { 1 },
     val spo2Percent: Int = 0,
     val hrvMs: Int = 0,
 )
@@ -43,7 +42,6 @@ data class HeartStats(
     val zoneMid: Int = 0,
     val zoneHigh: Int = 0,
     /** Highest bpm in each local hour 0–23, 0 where there were no samples. */
-    val hrHourly: List<Int> = List(24) { 0 },
 )
 
 data class WorkoutStats(

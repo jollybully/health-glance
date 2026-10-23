@@ -4,7 +4,6 @@
 #include "cards.h"
 #include "anim.h"
 #include "mockups.h"
-#include "detail.h"
 #include "pulse.h"
 
 #ifndef HG_CACHE_PROBE
@@ -289,14 +288,12 @@ static void selftest_long_click(ClickRecognizerRef r, void *ctx) {
 static void up_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  if (detail_up()) return; /* the detail screen cycles instead of the deck */
   if (s_card_idx < CARD_COUNT - 1) push(s_card_idx + 1, -1); /* next card enters from the top */
 }
 
 static void down_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  if (detail_down()) return;
   if (anim_busy()) return; /* let the push settle before acting on the deck */
   if (s_card_idx == 0) return; /* Back is the only way out of the app */
   push(s_card_idx - 1, 1); /* previous card enters from the bottom */
@@ -305,23 +302,12 @@ static void down_click(ClickRecognizerRef r, void *ctx) {
 static void select_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  if (anim_busy()) return;
-  if (detail_is_open()) {
-    detail_select(); /* Heart: live <-> graph */
-    return;
-  }
-  pulse_set_visible(false); /* the detail owns the display */
-  detail_open(s_card_idx);
+  /* The deck is the app: four cards, nothing to drill into. */
 }
 
 static void back_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  if (detail_is_open()) {
-    detail_close();
-    pulse_set_visible(true);
-    return;
-  }
   /* Cancel first: the layers are destroyed in window_unload. */
   anim_cancel();
   window_stack_pop_all(true);
@@ -379,51 +365,7 @@ static const int REQ_DELAYS_MS[] = {400, 800, 1500, 3000, 6000, 12000};
 
 static void req_timer(void *data);
 
-/* A day request that the phone never answers would leave that screen empty
- * forever, so it is retried a couple of times before giving up. */
-static AppTimer *s_day_timer;
-static int s_day_tries;
-
-static void day_retry(void *data);
-static void request_day(int day);
-
-static void schedule_day_retry(void) {
-  if (s_day_timer) app_timer_cancel(s_day_timer);
-  s_day_timer = app_timer_register(4000, day_retry, NULL);
-}
-
-static void day_retry(void *data) {
-  (void)data;
-  s_day_timer = NULL;
-  if (!detail_is_open() || !detail_day_pending()) return;
-  if (s_day_tries >= 2) {
-    APP_LOG(APP_LOG_LEVEL_WARNING, "day %d never answered", detail_day());
-    return;
-  }
-  s_day_tries++;
-  APP_LOG(APP_LOG_LEVEL_INFO, "day retry %d for %d", s_day_tries, detail_day());
-  request_day(detail_day());
-}
-
 /* Ask the phone for one past day's charts (detail screens cycle with Up/Down). */
-static void request_day(int day) {
-#if HG_DEMO
-  (void)day;
-#else
-  DictionaryIterator *it;
-  AppMessageResult r = app_message_outbox_begin(&it);
-  if (r != APP_MSG_OK) {
-    APP_LOG(APP_LOG_LEVEL_WARNING, "day req not sent: %d", (int)r);
-    return;
-  }
-  dict_write_int32(it, MESSAGE_KEY_SERIES_DAY, day);
-  r = app_message_outbox_send();
-  APP_LOG(APP_LOG_LEVEL_INFO, "SERIES_DAY %d -> %d", day, (int)r);
-  s_day_tries = 0;
-  schedule_day_retry();
-#endif
-}
-
 static void send_req(void) {
 #if HG_DEMO
   return;
@@ -580,32 +522,6 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
       got_live = true;
     } else if (k == MESSAGE_KEY_HR_LIVE_MAX) {
       g_live.max = iv;
-    } else if (k == MESSAGE_KEY_DAY_STEPS) {
-      detail_set_day_total(0, iv);
-      got_live = got_live; /* not live: no pulse involvement */
-    } else if (k == MESSAGE_KEY_DAY_SLEEP_MIN) {
-      detail_set_day_total(1, iv);
-    } else if (k == MESSAGE_KEY_DAY_DEEP) {
-      detail_set_day_total(2, iv);
-    } else if (k == MESSAGE_KEY_DAY_REM) {
-      detail_set_day_total(3, iv);
-    } else if (k == MESSAGE_KEY_DAY_HR_MIN) {
-      detail_set_day_total(4, iv);
-    } else if (k == MESSAGE_KEY_DAY_HR_MAX) {
-      detail_set_day_total(5, iv);
-    } else if (k == MESSAGE_KEY_SERIES_DAY) {
-      detail_set_day(iv);
-    } else if (k == MESSAGE_KEY_STEPS_SERIES || k == MESSAGE_KEY_SLEEP_SERIES ||
-               k == MESSAGE_KEY_HR_SERIES || k == MESSAGE_KEY_WO_SERIES) {
-      if (t->type == TUPLE_BYTE_ARRAY) {
-        int card = (k == MESSAGE_KEY_STEPS_SERIES)   ? 0
-                   : (k == MESSAGE_KEY_SLEEP_SERIES) ? 1
-                   : (k == MESSAGE_KEY_HR_SERIES)    ? 2
-                                                     : 3;
-        detail_set_series(card, t->value->data, t->length);
-      }
-    } else if (k == MESSAGE_KEY_WO_HIST) {
-      if (t->type == TUPLE_BYTE_ARRAY) detail_set_workouts(t->value->data, t->length);
     } else if (k == MESSAGE_KEY_STATS_ERR) {
       if (t->type == TUPLE_CSTRING) {
         strncpy(s->status, t->value->cstring, ST_LEN - 1);
@@ -631,12 +547,11 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
   if (got_live) {
     /* the frame beats at the strap's rate while the deck is showing */
     pulse_set_bpm(stats_live_fresh() ? g_live.bpm : 0);
-    if (detail_is_open()) detail_redraw();
     layer_mark_dirty(s_card[s_front]);
   }
   /* The charts travel as their own AppMessage, so a series-only message has to
    * count as data arriving — without this the cache was never written for them. */
-  if (got_root || got_wo || detail_has_series()) {
+  if (got_root || got_wo) {
     s_loaded = true;
     stats_save_cache();
     if (s_req_timer) {
@@ -682,13 +597,11 @@ static void window_load(Window *w) {
   layer_add_child(root, s_card[0]);
   layer_add_child(root, s_seam); /* seam on top of both cards */
   pulse_init(root, b);  /* live-rate frame, under the detail screen */
-  detail_init(root, b); /* the drill-down screen lives above everything */
-  detail_set_request_day(request_day);
 
 #if HG_CACHE_PROBE
   /* QA only: paint the cache state where a screenshot can read it. */
   app_log(APP_LOG_LEVEL_INFO, "CACHE_PROBE steps=%d updated=%s from_cache=%d series=%d",
-          g_stats.steps, g_stats.updated, (int)stats_is_cached(), (int)detail_has_series());
+          g_stats.steps, g_stats.updated, (int)stats_is_cached(), 0);
 #endif
 
   /* Always rise into place: quick launch (Up from the watchface) is the case
@@ -734,7 +647,6 @@ static void window_unload(Window *w) {
   cards_warp_cancel();
   anim_cancel();
   pulse_deinit();
-  detail_deinit();
   layer_destroy(s_seam);
   layer_destroy(s_card[0]);
   layer_destroy(s_card[1]);

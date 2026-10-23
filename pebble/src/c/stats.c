@@ -1,5 +1,4 @@
 #include "stats.h"
-#include "detail.h"
 
 Stats g_stats;
 LiveHr g_live;
@@ -93,20 +92,10 @@ void stats_load_cache(void) {
     s_have_last = true;
     s_from_cache = true;
   }
-  /* The charts live in their own key: a cold start must show the same graphs the
-   * last sync drew, not an empty screen that looks like a failed sync. */
-  SeriesBlob sb;
-  int sread = persist_read_data(SERIES_KEY, &sb, sizeof(sb));
-  if (sread == (int)sizeof(sb) && sb.magic_ok) {
-    detail_import_series(&sb);
-    APP_LOG(APP_LOG_LEVEL_INFO, "series cache loaded (%d bytes)", sread);
-  } else {
-    APP_LOG(APP_LOG_LEVEL_INFO, "series cache empty (%d/%d)", sread, (int)sizeof(sb));
-  }
 }
 
 bool stats_cache_needed(void) {
-  return !s_from_cache || detail_series_dirty();
+  return !s_from_cache;
 }
 
 void stats_save_cache(void) {
@@ -124,16 +113,6 @@ void stats_save_cache(void) {
       APP_LOG(APP_LOG_LEVEL_INFO, "cache written (%d bytes)", (int)sizeof(b));
     } else {
       APP_LOG(APP_LOG_LEVEL_ERROR, "cache write FAILED");
-    }
-  }
-  if (detail_series_dirty()) {
-    SeriesBlob sb;
-    detail_export_series(&sb);
-    if (persist_write_data(SERIES_KEY, &sb, sizeof(sb)) == (int)sizeof(sb)) {
-      detail_series_mark_saved();
-      APP_LOG(APP_LOG_LEVEL_INFO, "series written (%d bytes)", (int)sizeof(sb));
-    } else {
-      APP_LOG(APP_LOG_LEVEL_ERROR, "series write FAILED");
     }
   }
 #endif

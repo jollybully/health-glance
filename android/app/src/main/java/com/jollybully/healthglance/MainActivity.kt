@@ -217,15 +217,10 @@ fun CompanionScreen(
             /* The charts are a separate push, so say plainly what was packed and
              * what the watch transport answered. Without this, "no graphs" cannot
              * be told apart from "no data in Health Connect". */
-            val seriesInfo = sync.cachedSeriesInfo()
-            if (seriesInfo.isNotBlank()) {
-                Text("Charts: $seriesInfo", style = MaterialTheme.typography.bodySmall, color = Mute)
-            }
             /* What the last watch day-cycle request returned: tells apart "no data
              * in Health Connect" from "the watch never got it". */
             val dayInfo = sync.cachedDayInfo()
             if (dayInfo.isNotBlank()) {
-                Text("Day cycling: $dayInfo", style = MaterialTheme.typography.bodySmall, color = Mute)
             }
 
             Button(

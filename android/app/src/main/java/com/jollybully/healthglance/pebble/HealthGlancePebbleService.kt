@@ -34,50 +34,6 @@ class HealthGlancePebbleService : BasePebbleListenerService() {
     ): ReceiveResult {
         if (watchappUUID != MessageKeys.WATCH_APP_UUID) return ReceiveResult.Nack
 
-        /* The watch cycles back through days on the detail screens; answer with
-         * that day's charts specifically rather than a full re-sync. */
-        /* The watch writes this with dict_write_int32, so it arrives as a SIGNED
-         * tuple. Casting only to UInt32 silently dropped every day request, which
-         * is why past days never populated. */
-        val dayRequest = dictInt(data[MessageKeys.SERIES_DAY])
-        if (dayRequest != null) {
-            val offset = dayRequest.coerceIn(0, 30)
-            Log.i(
-                TAG,
-                "SERIES_DAY request for $offset from $watch " +
-                    "(item=${data[MessageKeys.SERIES_DAY]?.javaClass?.simpleName})",
-            )
-            val series = repository.loadDaySeries(offset)
-            cache.saveDayInfo(
-                "day $offset: ${series.steps.sum()} steps, " +
-                    "${series.steps.count { it > 0 }} hours, " +
-                    "${series.hr.count { it > 0 }} hr hours, " +
-                    "${series.sleepSlots.toSet().size} sleep stages",
-            )
-            sender.sendDaySeries(
-                day = offset,
-                steps = SeriesCodec.stepsSeries(
-                    com.jollybully.healthglance.data.ActivityStats(stepsHourly = series.steps),
-                ),
-                heart = SeriesCodec.heartSeries(
-                    com.jollybully.healthglance.data.HeartStats(hrHourly = series.hr),
-                ),
-                sleep = SeriesCodec.sleepSeries(
-                    com.jollybully.healthglance.data.SleepStats(stageSlots = series.sleepSlots),
-                ),
-                totals = DayTotals(
-                    steps = series.stepsTotal,
-                    asleepMinutes = series.asleepMinutes,
-                    deepMinutes = series.deepMinutes,
-                    remMinutes = series.remMinutes,
-                    hrMin = series.hrMin,
-                    hrMax = series.hrMax,
-                ),
-                watches = listOf(watch),
-            )
-            return ReceiveResult.Ack
-        }
-
         if (!data.containsKey(MessageKeys.STATS_REQ)) return ReceiveResult.Ack
 
         Log.i(TAG, "STATS_REQ from $watch")
@@ -85,16 +41,6 @@ class HealthGlancePebbleService : BasePebbleListenerService() {
         return ReceiveResult.Ack
     }
 
-    /** Read a numeric tuple whatever width or signedness the watch sent. */
-    private fun dictInt(item: PebbleDictionaryItem?): Int? = when (item) {
-        is PebbleDictionaryItem.Int32 -> item.value.toInt()
-        is PebbleDictionaryItem.UInt32 -> item.value.toInt()
-        is PebbleDictionaryItem.Int16 -> item.value.toInt()
-        is PebbleDictionaryItem.UInt16 -> item.value.toInt()
-        is PebbleDictionaryItem.Int8 -> item.value.toInt()
-        is PebbleDictionaryItem.UInt8 -> item.value.toInt()
-        else -> null
-    }
 
     override fun onAppClosed(watchappUUID: UUID, watch: WatchIdentifier) {
         if (watchappUUID != MessageKeys.WATCH_APP_UUID) return

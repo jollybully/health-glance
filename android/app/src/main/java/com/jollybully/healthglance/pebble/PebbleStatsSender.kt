@@ -16,15 +16,6 @@ interface PebbleStatsSender {
     suspend fun sendRootStats(stats: GlanceStats, watches: List<WatchIdentifier>? = null): SendOutcome =
         sendStats(stats, watches)
     suspend fun sendError(message: String, watches: List<WatchIdentifier>? = null): SendOutcome
-    suspend fun sendSeries(stats: GlanceStats, watches: List<WatchIdentifier>? = null): SendOutcome
-    suspend fun sendDaySeries(
-        day: Int,
-        steps: ByteArray,
-        heart: ByteArray,
-        sleep: ByteArray,
-        totals: DayTotals,
-        watches: List<WatchIdentifier>? = null,
-    ): SendOutcome
     suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>? = null): SendOutcome
     fun close()
 }
@@ -52,22 +43,7 @@ class LoggingPebbleStatsSender : PebbleStatsSender {
         return SendOutcome.Ok(emptyMap())
     }
 
-    override suspend fun sendSeries(stats: GlanceStats, watches: List<WatchIdentifier>?): SendOutcome {
-        Log.i(TAG, "mock sendSeries ${SeriesCodec.describe(stats)}")
-        return SendOutcome.Ok(emptyMap())
-    }
 
-    override suspend fun sendDaySeries(
-        day: Int,
-        steps: ByteArray,
-        heart: ByteArray,
-        sleep: ByteArray,
-        totals: DayTotals,
-        watches: List<WatchIdentifier>?,
-    ): SendOutcome {
-        Log.i(TAG, "mock sendDaySeries day=$day totals=$totals")
-        return SendOutcome.Ok(emptyMap())
-    }
 
     override suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>?): SendOutcome {
         Log.i(TAG, "mock sendLiveHr bpm=${sample.bpm}")
@@ -99,42 +75,8 @@ class PebbleKitStatsSender(context: Context) : PebbleStatsSender {
 
     /** The detail screens' charts, on their own so a byte-array problem cannot
      *  take the four cards down with it. */
-    override suspend fun sendSeries(stats: GlanceStats, watches: List<WatchIdentifier>?): SendOutcome {
-        Log.i(TAG, "sendSeries ${SeriesCodec.describe(stats)}")
-        return transmit(seriesDictionary(stats), watches)
-    }
 
     /** Answer a climb-back request with one past day's charts. */
-    override suspend fun sendDaySeries(
-        day: Int,
-        steps: ByteArray,
-        heart: ByteArray,
-        sleep: ByteArray,
-        totals: DayTotals,
-        watches: List<WatchIdentifier>?,
-    ): SendOutcome {
-        Log.i(
-            TAG,
-            "sendDaySeries day=$day steps=${totals.steps} asleep=${totals.asleepMinutes} " +
-                "deep=${totals.deepMinutes} hr=${totals.hrMin}-${totals.hrMax}",
-        )
-        val dict: PebbleDictionary = mapOf(
-            MessageKeys.SERIES_DAY to PebbleDictionaryItem.UInt32(day.toLong().coerceAtLeast(0).toUInt()),
-            MessageKeys.STEPS_SERIES to PebbleDictionaryItem.Bytes(steps),
-            MessageKeys.HR_SERIES to PebbleDictionaryItem.Bytes(heart),
-            /* Sleep was missing here, which is why cycling back on the Sleep screen
-             * changed the header and nothing else. */
-            MessageKeys.SLEEP_SERIES to PebbleDictionaryItem.Bytes(sleep),
-            /* Totals, so a past day shows ITS numbers rather than the peak hour. */
-            MessageKeys.DAY_STEPS to PebbleDictionaryItem.UInt32(totals.steps.toLong().coerceAtLeast(0).toUInt()),
-            MessageKeys.DAY_SLEEP_MIN to PebbleDictionaryItem.UInt32(totals.asleepMinutes.toLong().coerceAtLeast(0).toUInt()),
-            MessageKeys.DAY_DEEP to PebbleDictionaryItem.UInt32(totals.deepMinutes.toLong().coerceAtLeast(0).toUInt()),
-            MessageKeys.DAY_REM to PebbleDictionaryItem.UInt32(totals.remMinutes.toLong().coerceAtLeast(0).toUInt()),
-            MessageKeys.DAY_HR_MIN to PebbleDictionaryItem.UInt32(totals.hrMin.toLong().coerceAtLeast(0).toUInt()),
-            MessageKeys.DAY_HR_MAX to PebbleDictionaryItem.UInt32(totals.hrMax.toLong().coerceAtLeast(0).toUInt()),
-        )
-        return transmit(dict, watches)
-    }
 
     override suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>?): SendOutcome {
         Log.i(TAG, "sendLiveHr bpm=${sample.bpm} state=${sample.state} min=${sample.min} max=${sample.max}")
@@ -234,34 +176,3 @@ fun LiveHr.Snapshot.toLiveHrDictionary(): PebbleDictionary {
         MessageKeys.HR_LIVE_MAX to PebbleDictionaryItem.UInt32(max.coerceAtLeast(0).toLong()),
     )
 }
-
-/**
- * Appends the detail screens' series to a stats dictionary. PebbleKit's byte
- * array item is `Bytes`; a PebbleDictionary is an immutable map, so this returns
- * a merged copy rather than mutating.
- */
-/** Byte-array series only — the watch merges them into its detail screens. */
-internal fun seriesDictionary(stats: GlanceStats): PebbleDictionary {
-    val keys = mapOf(
-        MessageKeys.STEPS_SERIES to "STEPS_SERIES",
-        MessageKeys.SLEEP_SERIES to "SLEEP_SERIES",
-        MessageKeys.HR_SERIES to "HR_SERIES",
-        MessageKeys.WO_SERIES to "WO_SERIES",
-        MessageKeys.WO_HIST to "WO_HIST",
-    )
-    val series = SeriesCodec.all(stats)
-    val dict = keys.mapNotNull { (key, name) ->
-        series[name]?.let { key to PebbleDictionaryItem.Bytes(it) }
-    }.toMap()
-    return dict + (MessageKeys.SERIES_DAY to PebbleDictionaryItem.UInt32(0u))
-}
-
-/** A past day's totals, sent alongside its charts. */
-data class DayTotals(
-    val steps: Int = 0,
-    val asleepMinutes: Int = 0,
-    val deepMinutes: Int = 0,
-    val remMinutes: Int = 0,
-    val hrMin: Int = 0,
-    val hrMax: Int = 0,
-)
