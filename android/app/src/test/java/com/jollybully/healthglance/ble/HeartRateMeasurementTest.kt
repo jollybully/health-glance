@@ -89,6 +89,15 @@ class HeartRateMeasurementTest {
     }
 
     @Test
+    fun `parse reject reasons`() {
+        assertEquals("empty_packet", HeartRateMeasurement.parseRejectReason(byteArrayOf()))
+        assertEquals("too_short", HeartRateMeasurement.parseRejectReason(byteArrayOf(0x00)))
+        assertEquals("wide_bpm_incomplete", HeartRateMeasurement.parseRejectReason(byteArrayOf(0x01, 0x2C)))
+        assertEquals("bpm_zero", HeartRateMeasurement.parseRejectReason(byteArrayOf(0x00, 0)))
+        assertEquals(null, HeartRateMeasurement.parseRejectReason(byteArrayOf(0x00, 72)))
+    }
+
+    @Test
     fun `truncated rr block keeps the bpm`() {
         val m = HeartRateMeasurement.parse(byteArrayOf(0x10, 61, 0x00))
         assertEquals(61, m?.bpm)

@@ -20,6 +20,23 @@ data class HeartRateMeasurement(
     companion object {
         const val MAX_PLAUSIBLE_BPM = 250
 
+        /** Human-readable reject reason for diagnostics; null when [parse] would succeed. */
+        fun parseRejectReason(data: ByteArray): String? {
+            if (data.isEmpty()) return "empty_packet"
+            if (data.size < 2) return "too_short"
+            val flags = data[0].toInt() and 0xFF
+            val wide = flags and 0x01 != 0
+            if (wide && data.size < 3) return "wide_bpm_incomplete"
+            val bpm = if (wide) {
+                (data[1].toInt() and 0xFF) or ((data[2].toInt() and 0xFF) shl 8)
+            } else {
+                data[1].toInt() and 0xFF
+            }
+            if (bpm <= 0) return "bpm_zero"
+            if (bpm > MAX_PLAUSIBLE_BPM) return "bpm_implausible"
+            return null
+        }
+
         fun parse(data: ByteArray): HeartRateMeasurement? {
             if (data.size < 2) return null
             val flags = data[0].toInt() and 0xFF

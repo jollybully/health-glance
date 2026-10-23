@@ -41,11 +41,11 @@ class HeartRateService : Service(), HeartRateClient.Listener {
 
     companion object {
         private const val TAG = "HealthGlance"
+        private const val HR_SVC_TAG = "HealthGlance/HrSvc"
         private const val CHANNEL_ID = "live_hr"
         private const val NOTIFICATION_ID = 41
         private const val PUBLISH_INTERVAL_MS = 2_000L
         private const val PUBLISH_DELTA_BPM = 2
-        private const val RECONNECT_DELAY_MS = 15_000L
         private const val SMOOTHING_WINDOW = 3
 
         const val ACTION_START = "com.jollybully.healthglance.LIVE_HR_START"
@@ -103,6 +103,8 @@ class HeartRateService : Service(), HeartRateClient.Listener {
      *  silently goes back to "Looking…" teaches the user nothing. */
     private var lastFailure = ""
     private var snapshot = LiveHr.Snapshot()
+    private var hadSampleThisSession = false
+    private var consecutiveNoSampleFailures = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -203,6 +205,7 @@ class HeartRateService : Service(), HeartRateClient.Listener {
     private fun connect() {
         reconnectJob?.cancel()
         window.clear()
+        hadSampleThisSession = false
         HealthGlanceApp.breadcrumb("connect()")
         try {
             client = HeartRateClient(this, this).also { it.start() }
@@ -266,12 +269,28 @@ class HeartRateService : Service(), HeartRateClient.Listener {
         updateNotification()
     }
 
+    override fun onSubscribed(deviceName: String) {
+        HealthGlanceApp.breadcrumb("subscribed to $deviceName")
+        snapshot = snapshot.copy(
+            state = LiveHr.State.Connecting,
+            deviceName = deviceName,
+            bpm = 0,
+            min = 0,
+            max = 0,
+            detail = "Connected, waiting for pulse",
+        )
+        LiveHr.set(snapshot)
+        updateNotification()
+    }
+
     override fun onStreaming(deviceName: String) {
         lastFailure = ""
+        consecutiveNoSampleFailures = 0
         HealthGlanceApp.breadcrumb("streaming from $deviceName")
         window.clear()
         sessionMin = 0
         sessionMax = 0
+        hadSampleThisSession = true
         snapshot = snapshot.copy(
             state = LiveHr.State.Streaming,
             deviceName = deviceName,
@@ -283,10 +302,16 @@ class HeartRateService : Service(), HeartRateClient.Listener {
     }
 
     override fun onSample(bpm: Int, sensorContact: Boolean?) {
+        Log.i(HR_SVC_TAG, "onSample bpm=$bpm contact=$sensorContact hadSample=$hadSampleThisSession")
         if (sensorContact == false) {
             // strap is on but not reading a pulse: say so instead of freezing a stale number
-            snapshot = snapshot.copy(state = LiveHr.State.Streaming, bpm = 0, detail = "No contact")
+            snapshot = snapshot.copy(
+                state = if (hadSampleThisSession) LiveHr.State.Streaming else LiveHr.State.Connecting,
+                bpm = 0,
+                detail = if (hadSampleThisSession) "No contact" else "Connected, waiting for pulse",
+            )
             LiveHr.set(snapshot)
+            updateNotification()
             return
         }
         window.addLast(bpm)
@@ -316,14 +341,33 @@ class HeartRateService : Service(), HeartRateClient.Listener {
     override fun onDropped(reason: String) {
         HealthGlanceApp.breadcrumb("dropped: $reason")
         if (!reason.lowercase().contains("stopped")) lastFailure = reason
+        if (!hadSampleThisSession) {
+            consecutiveNoSampleFailures++
+        }
+        val retryDetail = reason
         client?.let { runCatching { it.stop() } }
         client = null
-        snapshot = snapshot.copy(state = LiveHr.State.Retry, detail = reason)
+        window.clear()
+        lastPublishedBpm = 0
+        snapshot = snapshot.copy(
+            state = LiveHr.State.Retry,
+            bpm = 0,
+            min = 0,
+            max = 0,
+            detail = retryDetail,
+        )
         LiveHr.set(snapshot)
         updateNotification()
+        scope.launch {
+            runCatching {
+                senderOrCreate().sendLiveHr(snapshot.copy(publishedAtMillis = System.currentTimeMillis()))
+            }
+            Log.i(TAG, "live hr drop_notify state=${snapshot.state} detail=${snapshot.detail}")
+        }
         reconnectJob?.cancel()
+        val delayMs = HrBleReconnect.delayMs(consecutiveNoSampleFailures)
         reconnectJob = scope.launch {
-            delay(RECONNECT_DELAY_MS)
+            delay(delayMs)
             if (client == null) connect()
         }
     }
@@ -383,9 +427,10 @@ class HeartRateService : Service(), HeartRateClient.Listener {
         )
         val text = when (state) {
             LiveHr.State.Streaming -> if (bpm > 0) "$bpm bpm · min ${sessionMin} · max ${sessionMax}" else "Waiting for a pulse"
-            LiveHr.State.Retry -> "Reconnecting to the strap"
+            LiveHr.State.Retry -> snapshot.detail.ifBlank { "Reconnecting to the strap" }
             LiveHr.State.Scanning -> "Looking for a heart-rate strap"
             LiveHr.State.Failed -> snapshot.detail.ifBlank { "Failed" }
+            LiveHr.State.Connecting -> snapshot.detail.ifBlank { "Connecting to the strap" }
             else -> "Connecting to the strap"
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)

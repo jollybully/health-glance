@@ -22,3 +22,5 @@ Android 13 and below.
 
 Notes: watch app is native C for the Pebble Time 2 (Emery), 22 KB. Workouts shows the most
 recent session only.
+
+Vibe coded. The watch app and the Android companion were both written with AI agents under human direction, then tested on real hardware. Every screenshot in this listing is a real capture from the watch.
