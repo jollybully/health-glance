@@ -49,8 +49,6 @@ def build(ctx):
         # HG_SPRING_SCALE>1 slows the end-of-deck spring down so it can be
         # photographed; the shipped value is 1.
         ctx.env.append_value('CFLAGS', ['-DSPRING_SCALE={}'.format(os.environ.get('HG_SPRING_SCALE', '1'))])
-        # HG_EXIT_SCALE slows the leave animation down so it can be captured.
-        ctx.env.append_value('CFLAGS', ['-DEXIT_SCALE={}'.format(os.environ.get('HG_EXIT_SCALE', '1'))])
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
         ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c'), target=app_elf, bin_type='app')
 

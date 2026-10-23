@@ -205,25 +205,6 @@ static void drag_retreat_done(void *ctx) {
   layer_mark_dirty(s_card[s_front]);
 }
 
-/* Leaving: rise back up the way the card arrived. The window is still on screen
- * while this runs, so its background is what shows underneath — black, because a
- * white flash between a dark card and the watchface looks like a fault. */
-static bool s_exiting;
-
-static void leave_done(void *ctx) {
-  (void)ctx;
-  window_stack_pop_all(false); /* false: our own animation already played */
-}
-
-static void leave_app(void) {
-  if (s_exiting) return;
-  s_exiting = true;
-  window_set_background_color(s_window, GColorBlack);
-  pulse_set_visible(false);
-  anim_cancel();
-  anim_exit(s_card[s_front], s_w, s_h, leave_done, NULL);
-}
-
 /* How far the card leans when a gesture has nowhere to go. */
 #define LEAN_PX 16
 /* Finger drags lean with resistance rather than following one-to-one, so the end
@@ -294,8 +275,8 @@ static void touch_handler(const TouchEvent *event, void *context) {
       /* Pulled down hard at the first card: that is the way home, same as the
        * Down button. Anything less springs back. */
       if (lean >= LEAN_EXIT_PX && s_card_idx == 0) {
-        layer_set_frame(s_card[s_front], GRect(0, 0, s_w, s_h));
-        leave_app();
+        anim_cancel();
+        window_stack_pop_all(true);
         return;
       }
       anim_spring(s_card[s_front], s_w, s_h, LEAN_PX / 2, NULL, NULL);
@@ -362,7 +343,7 @@ static void selftest_long_click(ClickRecognizerRef r, void *ctx) {
 static void up_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  if (s_exiting || anim_busy() || anim_spring_busy()) return;
+  if (anim_busy() || anim_spring_busy()) return;
   if (s_card_idx < CARD_COUNT - 1) {
     push(s_card_idx + 1, -1); /* next card enters from the top */
     return;
@@ -375,10 +356,11 @@ static void up_click(ClickRecognizerRef r, void *ctx) {
 static void down_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  if (s_exiting || anim_busy() || anim_spring_busy()) return; /* let the deck settle first */
+  if (anim_busy() || anim_spring_busy()) return; /* let the deck settle first */
   if (s_card_idx == 0) {
     /* Quick launched from Up, so Down at the first card goes home. */
-    leave_app();
+    anim_cancel();
+    window_stack_pop_all(true);
     return;
   }
   push(s_card_idx - 1, 1); /* previous card enters from the bottom */
@@ -393,7 +375,9 @@ static void select_click(ClickRecognizerRef r, void *ctx) {
 static void back_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  leave_app();
+  /* Cancel first: the layers are destroyed in window_unload. */
+  anim_cancel();
+  window_stack_pop_all(true);
 }
 
 static void click_config(void *ctx) {

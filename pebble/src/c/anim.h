@@ -21,7 +21,3 @@ void anim_cancel(void);
 void anim_spring(Layer *l, int w, int h, int overshoot, AnimDone done, void *ctx);
 
 bool anim_spring_busy(void);
-
-/* Leaving the app: the card rises back up the way it arrived, so a quick launch
- * feels like a place you went into rather than a screen that vanished. */
-void anim_exit(Layer *l, int w, int h, AnimDone done, void *ctx);
