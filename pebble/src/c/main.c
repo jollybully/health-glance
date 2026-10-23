@@ -156,8 +156,12 @@ static void push(int to, int dir) {
 /* Drag the deck: the finger pulls the neighbouring card into view, and letting go
  * past a third of the screen commits the page. Finger down = the next card comes
  * down from the top, exactly like pressing Up. */
-#define DRAG_START_PX 10
-#define DRAG_COMMIT_DIV 3
+/* How far the finger travels before the card starts to follow, and how far it has
+ * to have travelled at release to turn the page. The old commit distance was a
+ * third of the screen (76 px), which felt like hauling the card across the glass;
+ * a quarter of that reads as a flick. */
+#define DRAG_START_PX 6
+#define DRAG_COMMIT_DIV 9
 
 static bool s_drag;
 static int s_drag_x0, s_drag_y0;
@@ -272,15 +276,19 @@ static void synth_swipe(int dy) {
 static void selftest_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  APP_LOG(APP_LOG_LEVEL_INFO, "selftest: long drag");
-  synth_swipe(150);
+  const int before = s_card_idx;
+  synth_swipe(30); /* flick towards the next card: should turn the page */
+  APP_LOG(APP_LOG_LEVEL_INFO, "TOUCH_SELFTEST flick 30px: %d -> %d (want %d)", before,
+          s_card_idx, before < CARD_COUNT - 1 ? before + 1 : before);
 }
 
 static void selftest_long_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  APP_LOG(APP_LOG_LEVEL_INFO, "selftest: short drag");
-  synth_swipe(20);
+  const int before = s_card_idx;
+  synth_swipe(12); /* a nudge below the threshold: should spring back */
+  APP_LOG(APP_LOG_LEVEL_INFO, "TOUCH_SELFTEST nudge 12px: %d -> %d (want %d)", before,
+          s_card_idx, before);
 }
 #endif
 
@@ -322,15 +330,17 @@ static void click_config(void *ctx) {
   window_single_click_subscribe(BUTTON_ID_BACK, mock_back);
   return;
 #endif
+#if HG_TOUCH_SELFTEST
+  /* QA build: Select replays a synthetic swipe, so it must NOT also be bound to
+   * select_click — two handlers on one button fired the gesture twice. */
+  window_single_click_subscribe(BUTTON_ID_SELECT, selftest_click);
+  window_long_click_subscribe(BUTTON_ID_SELECT, 0, selftest_long_click, NULL);
+#else
   window_single_click_subscribe(BUTTON_ID_SELECT, select_click);
+#endif
   window_single_click_subscribe(BUTTON_ID_UP, up_click);
   window_single_click_subscribe(BUTTON_ID_DOWN, down_click);
   window_single_click_subscribe(BUTTON_ID_BACK, back_click);
-#if HG_TOUCH_SELFTEST
-  /* QA build only: Select replays a long swipe, long-press Select a short one. */
-  window_single_click_subscribe(BUTTON_ID_SELECT, selftest_click);
-  window_long_click_subscribe(BUTTON_ID_SELECT, 0, selftest_long_click, NULL);
-#endif
 }
 
 /* ---------------- AppMessage ---------------- */
