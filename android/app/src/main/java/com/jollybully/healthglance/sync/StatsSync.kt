@@ -61,7 +61,7 @@ class StatsSync(
         }
 
         return try {
-            val stats = repository.loadStats()
+            val stats = repository.loadStats(stepGoal = cache.stepGoal())
             val outcome = sender.sendStats(stats, watches)
             val status = SyncStatus.fromSendOutcome(outcome)
             cache.save(stats, status)
@@ -79,6 +79,11 @@ class StatsSync(
     }
 
     fun cachedStats(): GlanceStats? = cache.loadStats()
+
+    /** The user's step target, owned by this app because Health Connect has none. */
+    fun stepGoal(): Int = cache.stepGoal()
+
+    fun saveStepGoal(goal: Int) = cache.saveStepGoal(goal)
 
     fun cachedStatus(): String = cache.loadStatus()
 

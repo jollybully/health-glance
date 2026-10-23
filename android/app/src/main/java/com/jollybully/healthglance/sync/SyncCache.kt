@@ -39,6 +39,14 @@ class SyncCache(context: Context) {
 
     fun loadStatus(): String = prefs.getString(KEY_STATUS, "Ready") ?: "Ready"
 
+    /** The daily step target. Lives here because it is a user preference, not
+     * health data: Health Connect has no goal API, so it has to be set. */
+    fun stepGoal(): Int = prefs.getInt(KEY_STEP_GOAL, STEP_GOAL_DEFAULT)
+
+    fun saveStepGoal(goal: Int) {
+        prefs.edit().putInt(KEY_STEP_GOAL, goal.coerceIn(STEP_GOAL_MIN, STEP_GOAL_MAX)).apply()
+    }
+
     /** What the last series push contained and what the watch transport said. */
 
 
@@ -54,6 +62,11 @@ class SyncCache(context: Context) {
         private const val KEY_STATUS = "status"
         private const val KEY_SAVED_AT = "saved_at"
         private const val KEY_DAY = "day_info"
+        private const val KEY_STEP_GOAL = "step_goal"
+
+        const val STEP_GOAL_DEFAULT = 10_000
+        const val STEP_GOAL_MIN = 500
+        const val STEP_GOAL_MAX = 100_000
 
         fun encodeStats(stats: GlanceStats): String {
             return JSONObject()

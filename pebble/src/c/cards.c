@@ -8,7 +8,7 @@
 #define BAR_H 8
 #define META_Y 178
 #define CUE_Y 202
-#define STEP_GOAL 10000
+#define STEP_GOAL_DEFAULT 10000
 
 /* The numbers warp, nothing else moves. s_hero_pm scales the hero glyph block
  * vertically about its own centre (1000 = identity, so a settled card is
@@ -203,7 +203,8 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
   if (card == CARD_STEPS) {
     text(ctx, "steps today", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
     fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, bw, BAR_H));
-    int pct = g_stats.steps > 0 ? (g_stats.steps * bw) / STEP_GOAL : 0;
+    const int goal = g_stats.step_goal > 0 ? g_stats.step_goal : STEP_GOAL_DEFAULT;
+    int pct = g_stats.steps > 0 ? (g_stats.steps * bw) / goal : 0;
     if (pct > bw) pct = bw;
     if (pct > 0) fill(ctx, GColorJaegerGreen, GRect(X_INSET, BAR_Y, pct, BAR_H));
     if (g_stats.dist_m > 0) {

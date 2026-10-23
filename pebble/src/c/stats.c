@@ -6,7 +6,7 @@ LiveHr g_live;
 #define CACHE_KEY 1u
 #define SERIES_KEY 2u
 #define CACHE_MAGIC 0x48475331u /* "HGS1" */
-#define CACHE_VERSION 1
+#define CACHE_VERSION 2 /* v2 adds step_goal */
 #define CACHE_HAS_WORKOUT 0x1
 
 /* Kept well under PERSIST_DATA_MAX_LENGTH (256 bytes per key). */
@@ -14,7 +14,7 @@ typedef struct {
   uint32_t magic;
   uint16_t version;
   uint16_t flags;
-  int32_t steps, dist_m, calories, resting_hr, sleep_min;
+  int32_t steps, dist_m, calories, resting_hr, sleep_min, step_goal;
   int32_t deep, light, rem, awake;
   int32_t hr_min, hr_max;
   int32_t wo_dur, wo_cal, wo_avg, wo_dist, wo_lo, wo_mid, wo_hi;
@@ -32,6 +32,7 @@ static void blob_from_stats(CacheBlob *b) {
   b->magic = CACHE_MAGIC;
   b->version = CACHE_VERSION;
   b->flags = g_stats.has_workout ? CACHE_HAS_WORKOUT : 0;
+  b->step_goal = g_stats.step_goal;
   b->steps = g_stats.steps;
   b->dist_m = g_stats.dist_m;
   b->calories = g_stats.calories;
@@ -58,6 +59,7 @@ static void blob_from_stats(CacheBlob *b) {
 #endif /* !HG_DEMO */
 
 static void stats_from_blob(const CacheBlob *b) {
+  g_stats.step_goal = b->step_goal;
   g_stats.steps = b->steps;
   g_stats.dist_m = b->dist_m;
   g_stats.calories = b->calories;
@@ -127,6 +129,7 @@ bool stats_live_fresh(void) {
 
 void stats_init(void) {
   memset(&g_stats, 0, sizeof(g_stats));
+  g_stats.step_goal = 10000; /* until the companion says otherwise */
   strcpy(g_stats.status, "Waiting for phone");
   stats_load_cache();
   if (s_from_cache) strcpy(g_stats.status, "Cached");

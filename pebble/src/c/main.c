@@ -592,6 +592,8 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
       got_live = true;
     } else if (k == MESSAGE_KEY_HR_LIVE_MAX) {
       g_live.max = iv;
+    } else if (k == MESSAGE_KEY_STEP_GOAL) {
+      if (iv > 0) s->step_goal = iv; /* a zero goal would be a division-by-nothing bar */
     } else if (k == MESSAGE_KEY_STATS_ERR) {
       if (t->type == TUPLE_CSTRING) {
         strncpy(s->status, t->value->cstring, ST_LEN - 1);

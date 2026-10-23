@@ -63,7 +63,7 @@ WO_HIST_BYTES = bytes([
 
 # Deliberately different from the DEMO fixture so a screenshot proves live data.
 RAW = {
-    "STEPS": 8240, "STEP_GOAL": 10000, "DIST_M": 7100, "CALORIES": 2508,
+    "STEPS": 8240, "STEP_GOAL": int(os.environ.get("EMU_GOAL", 10000)), "DIST_M": 7100, "CALORIES": 2508,
     "ACTIVE_MIN": 141, "RESTING_HR": 61,
     "SLEEP_MIN": 402, "DEEP": 61, "LIGHT": 198, "REM": 88, "AWAKE": 21,
     "UPDATED": "09:41", "SLEEP_START": "23:47", "SLEEP_END": "06:29",

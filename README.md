@@ -76,7 +76,9 @@ Sideload `health-glance-companion.apk` (package `com.jollybully.healthglance`; e
 unknown sources" when prompted). Then open **Health Glance**:
 
 1. **Grant Health Connect permissions** — read-only access to steps, sleep, heart rate, exercise.
-2. **Sync & push to watch** — the first push. After that it refreshes every 30 minutes, and the
+2. **Set your daily step goal** if 10,000 isn't yours. Health Connect stores steps but has no concept
+   of a target, so the goal lives in the companion and travels with every sync.
+3. **Sync & push to watch** — the first push. After that it refreshes every 30 minutes, and the
    watch asks for fresh numbers whenever you open it.
 
 ### 3. Make it your quick launch

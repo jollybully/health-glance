@@ -11,6 +11,7 @@
  * numbers are unchanged from the Alloy build (see package.json messageKeys). */
 typedef struct {
   int steps, dist_m, calories, resting_hr, sleep_min;
+  int step_goal; /* the user's daily target, set in the companion (default 10000) */
   int deep, light, rem, awake;
   char sleep_start[ST_LEN], sleep_end[ST_LEN], updated[ST_LEN];
   int hr_min, hr_max;

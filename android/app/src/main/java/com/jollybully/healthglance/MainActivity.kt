@@ -11,7 +11,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -103,6 +108,7 @@ fun CompanionScreen(
     var stats by remember { mutableStateOf<GlanceStats?>(sync.cachedStats()) }
     var status by remember { mutableStateOf(sync.cachedStatus()) }
     var busy by remember { mutableStateOf(false) }
+    var goalText by remember { mutableStateOf(sync.stepGoal().toString()) }
     val live by LiveHr.state.collectAsState()
 
     /** BLE permissions differ by OS: SCAN/CONNECT on 12+, fine location below it. */
@@ -238,6 +244,43 @@ fun CompanionScreen(
             }
 
 
+
+            Box(modifier = Modifier.height(12.dp))
+
+            Text("Daily step goal", fontWeight = FontWeight.Bold, color = Mute)
+            Text(
+                "Health Connect stores steps but not targets, so the goal comes from here. " +
+                    "It is sent to the watch with each sync.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Mute,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = goalText,
+                    onValueChange = { new ->
+                        /* digits only, and short enough to stay a sane target */
+                        goalText = new.filter { it.isDigit() }.take(6)
+                    },
+                    singleLine = true,
+                    label = { Text("steps") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = {
+                        val goal = goalText.toIntOrNull() ?: 10000
+                        sync.saveStepGoal(goal)
+                        goalText = sync.stepGoal().toString()
+                        scope.launch { refreshNow() } /* push it straight away */
+                    },
+                    enabled = !busy && goalText.isNotEmpty(),
+                ) {
+                    Text("Save")
+                }
+            }
 
             Box(modifier = Modifier.height(8.dp))
 
