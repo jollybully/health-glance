@@ -16,8 +16,9 @@ Needs the Android companion app, sideloaded from the project's releases page, be
 can't talk to a strap or to Health Connect on its own. Read-only permissions, no account, no server,
 no analytics: it goes phone to watch and stops there.
 
-Health Connect wants Android 8 or newer. The watch app is native C for the Pebble Time 2 (Emery),
-22 KB, and the layout is built around that screen, so it's Emery only for now.
+Health Connect wants Android 8 or newer. The watch app is native C, 41 KB, and runs on the Pebble
+Time 2 and the Pebble Round 2. Same four cards either way: on the round one the card is laid out
+inside the circle so the numbered band and the footer stay off the bezel.
 
 Warning: certified vibe coded slop. Written with AI agents under human direction, then tested on
 real hardware. Every screenshot here is a real capture from the watch.

@@ -1,14 +1,67 @@
 #include "cards.h"
 
-#define CAP_H 36
-#define X_INSET 10
-#define HERO_Y 44
-#define UNIT_Y 106
-#define BAR_Y 136
 #define BAR_H 8
-#define META_Y 178
-#define CUE_Y 202
 #define STEP_GOAL_DEFAULT 10000
+
+/* One geometry table, two shapes. Emery is 200x228 and rectangular, so its numbers
+ * are the ones this app was pixel-fitted against and must not move by a pixel.
+ * Gabbro (Round 2) is 260x260 *round*: a rectangle of content loses its corners to
+ * the bezel, so the card is laid out inside the inscribed square instead. 154/1000
+ * of the short edge is 40px on 260, giving a 180px column - just inside the
+ * geometric 184px square, which is the margin that stops the cap band and the
+ * footer from being shaved by the glass. */
+typedef struct {
+  int cap_x, cap_y, cap_w;
+  int ink_x;
+  int cap_h, title_y, pips_x, pips_y;
+  int hero_y, unit_y, bar_y, meta_y, cue_y;
+} CardLayout;
+
+static CardLayout s_l;
+
+static void layout_for(GRect b) {
+  s_l.ink_x = 10;
+  s_l.cap_x = 0;
+  s_l.cap_w = b.size.w;
+  s_l.cap_y = 0;
+  s_l.cap_h = 36;
+  s_l.title_y = 1;
+  s_l.pips_x = b.size.w - 10 - 34;
+  s_l.pips_y = 18;
+  s_l.hero_y = 44;
+  s_l.unit_y = 106;
+  s_l.bar_y = 136;
+  s_l.meta_y = 178;
+  s_l.cue_y = 202;
+#if PBL_ROUND
+  const int short_edge = b.size.w < b.size.h ? b.size.w : b.size.h;
+  const int inset = (short_edge * 154) / 1000;
+  const int col = short_edge - 2 * inset;      /* 180 on 260 */
+  const int top = (b.size.h - col) / 2;        /* 40 on 260 */
+  s_l.ink_x = inset;
+  s_l.cap_x = inset;
+  s_l.cap_w = col;
+  s_l.cap_y = top;
+  s_l.cap_w = col;
+  s_l.cap_h = 28;
+  s_l.title_y = top + 1;
+  s_l.pips_x = inset + col - 8 - 34;
+  s_l.pips_y = top + 14;
+  s_l.hero_y = top + 30;
+  s_l.unit_y = top + 84;
+  s_l.bar_y = top + 112;
+  s_l.meta_y = top + 128;
+  s_l.cue_y = top + 156;
+#endif
+}
+
+#define CAP_H (s_l.cap_h)
+#define X_INSET (s_l.ink_x)
+#define HERO_Y (s_l.hero_y)
+#define UNIT_Y (s_l.unit_y)
+#define BAR_Y (s_l.bar_y)
+#define META_Y (s_l.meta_y)
+#define CUE_Y (s_l.cue_y)
 
 /* The numbers warp, nothing else moves. s_hero_pm scales the hero glyph block
  * vertically about its own centre (1000 = identity, so a settled card is
@@ -107,11 +160,11 @@ static void hero_str(char *b, size_t n, int card) {
 /* ---------------- chrome ---------------- */
 
 static void draw_pips(GContext *ctx, int w, int card) {
-  int x = w - 10 - 34;
-  const int baseline = 18;
+  (void)w;
+  int x = s_l.pips_x;
   for (int i = 0; i < 4; i++) {
     int s = (i == card) ? 7 : 5;
-    fill(ctx, (i == card) ? GColorWhite : CAP_DIM[card], GRect(x, 18 - s, s, s));
+    fill(ctx, (i == card) ? GColorWhite : CAP_DIM[card], GRect(x, s_l.pips_y - s, s, s));
     x += s + 4;
   }
 }
@@ -186,13 +239,15 @@ static void draw_hero_at(GContext *ctx, const char *text, int y0) {
 
 void cards_draw(GContext *ctx, GRect bounds, int card) {
   const int w = bounds.size.w, h = bounds.size.h;
+  layout_for(bounds);
   const int bw = w - 2 * X_INSET;
   char hero[24], meta[128], tmp1[16], tmp2[16];
 
   fill(ctx, GColorWhite, GRect(0, 0, w, h));
-  fill(ctx, CAP[card], GRect(0, 0, w, CAP_H));
-  /* y=1 puts the cap title ink at 11..24, matching the Alloy cards exactly. */
-  text(ctx, card_title(card), s_f_title, GColorWhite, X_INSET, 1, bw - 40, 32);
+  fill(ctx, CAP[card], GRect(s_l.cap_x, s_l.cap_y, s_l.cap_w, CAP_H));
+  /* y=1 puts the cap title ink at 11..24, matching the Alloy cards exactly; on a
+   * round screen the same +1 is applied to the cap the layout actually drew. */
+  text(ctx, card_title(card), s_f_title, GColorWhite, X_INSET, s_l.title_y, bw - 40, 32);
   draw_pips(ctx, w, card);
 
   hero_str(hero, sizeof(hero), card);

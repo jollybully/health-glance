@@ -43,13 +43,26 @@ static int frame_thickness(void) {
   return v;
 }
 
+/* On a round display a rectangular frame is mostly outside the glass: only the four
+ * mid-edges survive the bezel, which reads as stray slivers rather than a pulse. So
+ * the same beat follows the shape of the screen - a ring at the bezel on Round 2, a
+ * frame on the rectangular watches. */
 static void draw_frame(GContext *ctx, GRect b, int w, GColor c) {
   if (w <= 0) return;
+#if PBL_ROUND
+  const int r_out = (b.size.w < b.size.h ? b.size.w : b.size.h) / 2;
+  GPoint centre = GPoint(b.size.w / 2, b.size.h / 2);
+  graphics_context_set_stroke_color(ctx, c);
+  for (int r = r_out - w; r <= r_out - 1; r++) {
+    if (r > 0) graphics_draw_circle(ctx, centre, r);
+  }
+#else
   graphics_context_set_fill_color(ctx, c);
   graphics_fill_rect(ctx, GRect(0, 0, b.size.w, w), 0, GCornerNone);
   graphics_fill_rect(ctx, GRect(0, b.size.h - w, b.size.w, w), 0, GCornerNone);
   graphics_fill_rect(ctx, GRect(0, 0, w, b.size.h), 0, GCornerNone);
   graphics_fill_rect(ctx, GRect(b.size.w - w, 0, w, b.size.h), 0, GCornerNone);
+#endif
 }
 
 static void layer_update(Layer *l, GContext *ctx) {
@@ -62,7 +75,12 @@ static void layer_update(Layer *l, GContext *ctx) {
    * not just a growing border */
   if (s_phase < 10) {
     graphics_context_set_stroke_color(ctx, GColorWhite);
+#if PBL_ROUND
+    const int r_out = (b.size.w < b.size.h ? b.size.w : b.size.h) / 2;
+    graphics_draw_circle(ctx, GPoint(b.size.w / 2, b.size.h / 2), r_out - w - 2);
+#else
     graphics_draw_rect(ctx, GRect(w + 1, w + 1, b.size.w - 2 * w - 2, b.size.h - 2 * w - 2));
+#endif
   }
 }
 

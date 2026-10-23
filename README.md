@@ -2,7 +2,7 @@
 
 **Your Health Connect data, on your wrist, at a glance.**
 
-A native C watch app for the **Pebble Time 2 (Emery)** and a small Android companion that reads
+A native C watch app for the **Pebble Time 2 (Emery)** and **Pebble Round 2 (Gabbro)**, and a small Android companion that reads
 **Health Connect** on-device and pushes four numbers to the watch. No account, no cloud, no
 Google Fit API keys — just the health data your phone already holds.
 
@@ -158,12 +158,13 @@ Two honest caveats:
 
 ### Watch (native C)
 
-Requires [Pebble Tool](https://developer.repebble.com) with SDK 4.17 (Emery).
+Requires [Pebble Tool](https://developer.repebble.com) with SDK 4.17 (Emery and Gabbro).
 
 ```bash
 cd pebble
 pebble build                        # live build
-pebble install --emulator emery     # run it in the emulator
+pebble install --emulator emery     # rectangular 200x228
+pebble install --emulator gabbro    # round 260x260 (Round 2)
 ```
 
 Build flags: `HG_DEMO=1` seeds fixture numbers for emulator QA, `HG_LAUNCH_HOLD=1` freezes the

@@ -155,7 +155,10 @@ if "--no-series" in sys.argv:
 
 
 class _Args:
-    emulator = os.environ.get("PEBBLE_EMULATOR", "emery")
+    # None means "whichever emulator is running". Hardcoding 'emery' here made the
+    # sender fail with ENOENT qemu-pebble on a gabbro (Round 2) emulator, because the
+    # transport tries to exec a binary named after a platform that is not running.
+    emulator = os.environ.get("PEBBLE_EMULATOR")
     sdk = None
     vnc = False
 

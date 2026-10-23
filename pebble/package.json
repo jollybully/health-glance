@@ -1,7 +1,7 @@
 {
   "name": "health-glance",
   "author": "jollybully",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "keywords": [
     "pebble-app"
   ],
@@ -12,7 +12,8 @@
     "uuid": "ced3f81d-aaae-4ee4-a49c-885a247644ec",
     "sdkVersion": "3",
     "targetPlatforms": [
-      "emery"
+      "emery",
+      "gabbro"
     ],
     "watchapp": {
       "watchface": false
