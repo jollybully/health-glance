@@ -172,17 +172,16 @@ static void draw_steps(GContext *ctx) {
       if (s_series[CARD_D_STEPS][i] > 0) active++;
     }
     const int avg = active > 0 ? (sum / active) : 0;
+    /* The hero is the same number the card showed, for the day on screen: a
+     * drill-down adds context, it does not swap the metric. */
     if (past && s_day_totals_ok) {
-      snprintf(a, sizeof a, "%d", s_day_totals[0]); /* the day's own total */
-      cards_hero_text(ctx, a, HERO_Y);
+      snprintf(a, sizeof a, "%d", s_day_totals[0]);
     } else {
-      /* today has no per-day total in the series, so show the peak hour rather
-       * than inventing one */
-      snprintf(a, sizeof a, "%d", peak * 100);
-      cards_hero_text(ctx, a, HERO_Y);
+      snprintf(a, sizeof a, "%d", g_stats.steps);
     }
-    /* Say what the chart is. "steps by hour" over "0-23h" removes the guesswork. */
-    label_left(ctx, "steps by hour", GColorDarkGray, UNIT_Y);
+    cards_hero_text(ctx, a, HERO_Y);
+    /* LEFT names the number, RIGHT names the chart. One rule, every screen. */
+    label_left(ctx, "steps", GColorDarkGray, UNIT_Y);
     label_right(ctx, "0-23h", GColorDarkGray, UNIT_Y);
     /* A real average, drawn only when it is derived from this day's hours — the
      * old line was decoration and implied a meaning it did not have. */
@@ -246,9 +245,13 @@ static void draw_sleep(GContext *ctx) {
     snprintf(a, sizeof a, "%d:%02d", s_day_totals[1] / 60, s_day_totals[1] % 60);
     cards_hero_text(ctx, a, HERO_Y);
     label_left(ctx, "asleep", GColorDarkGray, UNIT_Y);
+  } else if (!past) {
+    snprintf(a, sizeof a, "%d:%02d", g_stats.sleep_min / 60, g_stats.sleep_min % 60);
+    cards_hero_text(ctx, a, HERO_Y);
+    label_left(ctx, "asleep", GColorDarkGray, UNIT_Y);
   } else if (past) {
     cards_hero_text(ctx, "", HERO_Y);
-    label_left(ctx, "sleep stages", GColorDarkGray, UNIT_Y);
+    label_left(ctx, "asleep", GColorDarkGray, UNIT_Y);
   } else {
     snprintf(a, sizeof a, "%d", g_stats.deep);
     cards_hero_text(ctx, a, HERO_Y);
@@ -274,7 +277,7 @@ static void draw_sleep(GContext *ctx) {
     /* Only name the dominant stage when the hero is NOT the asleep total: two
      * different meanings under one number is what made these screens confusing. */
     if (!(past && s_day_totals_ok && s_day_totals[1] > 0)) {
-      label_right(ctx, STAGE_NAME[most], GColorDarkGray, UNIT_Y);
+      label_right(ctx, "stages", GColorDarkGray, UNIT_Y);
     }
   } else {
     label_right(ctx, "no series", GColorDarkGray, UNIT_Y);
@@ -347,9 +350,9 @@ static void draw_heart(GContext *ctx) {
     }
   }
   if (peak > 0) {
-    snprintf(a, sizeof a, "%d", peak);
+    snprintf(a, sizeof a, "%d", g_stats.resting_hr > 0 ? g_stats.resting_hr : peak);
     cards_hero_text(ctx, a, HERO_Y);
-    label_left(ctx, "peak bpm", GColorDarkGray, UNIT_Y);
+    label_left(ctx, "resting bpm", GColorDarkGray, UNIT_Y);
     /* resting rate as the datum, behind the bars */
     int floor_bpm = g_stats.resting_hr > 0 ? g_stats.resting_hr : 50;
     fill(ctx, GColorDarkGray,
@@ -359,14 +362,13 @@ static void draw_heart(GContext *ctx) {
       int h = ((v - 40) * (BAR_Y - 2 - CHART_TOP)) / 120;
       bar(ctx, X_INSET + i * 8, 5, h, i == peak_hour ? GColorBlack : GColorImperialPurple);
     }
-    snprintf(a, sizeof a, "%d-%d", peak_hour, (peak_hour + 1) % 24);
-    label_right(ctx, a, GColorDarkGray, UNIT_Y);
+    label_right(ctx, "bpm by hour", GColorDarkGray, UNIT_Y);
   } else {
     snprintf(a, sizeof a, "%d", g_stats.resting_hr);
     cards_hero_text(ctx, a, HERO_Y);
     label_left(ctx, "resting bpm", GColorDarkGray, UNIT_Y);
     if (live_fresh()) {
-      label_right(ctx, "live ^", GColorDarkGray, UNIT_Y);
+      label_right(ctx, "SEL live", GColorDarkGray, UNIT_Y);
     } else if (s_no_live_hint) {
       label_right(ctx, "no live", GColorDarkGray, UNIT_Y);
     } else {
@@ -375,9 +377,9 @@ static void draw_heart(GContext *ctx) {
   }
 
   if (s_day > 0 && s_day_totals_ok) {
-    snprintf(a, sizeof a, "min %d · max %d", s_day_totals[4], s_day_totals[5]);
+    snprintf(a, sizeof a, "peak %d · min %d", s_day_totals[5], s_day_totals[4]);
   } else {
-    snprintf(a, sizeof a, "min %d · max %d", g_stats.hr_min, g_stats.hr_max);
+    snprintf(a, sizeof a, "peak %d · min %d", g_stats.hr_max, g_stats.hr_min);
   }
   label_full(ctx, a, GColorBlack, META_Y);
   cue(ctx);

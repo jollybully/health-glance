@@ -288,10 +288,7 @@ static void down_click(ClickRecognizerRef r, void *ctx) {
   (void)ctx;
   if (detail_down()) return;
   if (anim_busy()) return; /* let the push settle before acting on the deck */
-  if (s_card_idx == 0) {
-    window_stack_pop_all(true); /* Down on Steps exits to the watchface */
-    return;
-  }
+  if (s_card_idx == 0) return; /* Back is the only way out of the app */
   push(s_card_idx - 1, 1); /* previous card enters from the bottom */
 }
 
