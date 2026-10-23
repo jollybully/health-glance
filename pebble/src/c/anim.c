@@ -192,7 +192,46 @@ void anim_spring(Layer *l, int w, int h, int overshoot, AnimDone done, void *ctx
 
 bool anim_spring_busy(void) { return s_spring_busy; }
 
+/* ---------------- leaving ---------------- */
+
+#ifndef EXIT_SCALE
+#define EXIT_SCALE 1 /* HG_EXIT_SCALE slows it down for capture */
+#endif
+#define EXIT_MS (170 * EXIT_SCALE)
+
+static Layer *s_exit_layer;
+static Animation *s_exit_anim;
+static AnimDone s_exit_done;
+static void *s_exit_ctx;
+static bool s_exit_cancelled;
+
+static void exit_stopped(Animation *a, bool finished, void *ctx) {
+  (void)a; (void)finished; (void)ctx;
+  if (s_exit_cancelled) return;
+  s_exit_anim = NULL;
+  if (s_exit_done) s_exit_done(s_exit_ctx);
+}
+
+void anim_exit(Layer *l, int w, int h, AnimDone done, void *ctx) {
+  if (!l) {
+    if (done) done(ctx);
+    return;
+  }
+  s_exit_layer = l;
+  s_exit_done = done;
+  s_exit_ctx = ctx;
+  s_exit_cancelled = false;
+  s_exit_anim = frame_anim(l, GRect(0, -h, w, h), EXIT_MS, AnimationCurveEaseIn);
+  animation_set_handlers(s_exit_anim, (AnimationHandlers){.stopped = exit_stopped}, NULL);
+  animation_schedule(s_exit_anim);
+}
+
 void anim_cancel(void) {
+  s_exit_cancelled = true;
+  if (s_exit_anim) {
+    animation_unschedule(s_exit_anim);
+    s_exit_anim = NULL;
+  }
   s_spring.cancelled = true;
   if (s_spring.stage) {
     animation_unschedule(s_spring.stage);
