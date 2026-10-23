@@ -25,8 +25,22 @@ Four cards. That's the whole app.
 <img src="docs/images/cards-strip.png" alt="The four cards: Steps, Sleep, Heart, Workouts" width="100%">
 </p>
 
-Deliberately absent: charts to scroll, days to page back through, settings to configure. Health
+Deliberately absent: charts to page back through, days of history, settings to configure. Health
 *glance* means a number you can read mid-stride.
+
+### On the Pebble Round 2
+
+The same four cards, laid out for a circle rather than cropped into one: the card's colour becomes a
+ring at the glass, the bar becomes an arc of that ring — sleep stages and workout zones become arcs
+too — and the labels centre on the axis. The pulse follows the shape of the screen, so it beats as a
+ring instead of a frame.
+
+<p>
+<img src="docs/images/round2-strip.png" alt="The same four cards on a Pebble Round 2: Steps, Sleep, Heart, Workouts, drawn as rings" width="100%">
+</p>
+
+Nothing about the Pebble Time 2 changed to make this work: it is the same build, picking a different
+layout at compile time.
 
 ## Highlights
 
