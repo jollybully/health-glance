@@ -573,6 +573,19 @@ static void inbox_received(DictionaryIterator *it, void *ctx) {
       got_live = true;
     } else if (k == MESSAGE_KEY_HR_LIVE_MAX) {
       g_live.max = iv;
+    } else if (k == MESSAGE_KEY_DAY_STEPS) {
+      detail_set_day_total(0, iv);
+      got_live = got_live; /* not live: no pulse involvement */
+    } else if (k == MESSAGE_KEY_DAY_SLEEP_MIN) {
+      detail_set_day_total(1, iv);
+    } else if (k == MESSAGE_KEY_DAY_DEEP) {
+      detail_set_day_total(2, iv);
+    } else if (k == MESSAGE_KEY_DAY_REM) {
+      detail_set_day_total(3, iv);
+    } else if (k == MESSAGE_KEY_DAY_HR_MIN) {
+      detail_set_day_total(4, iv);
+    } else if (k == MESSAGE_KEY_DAY_HR_MAX) {
+      detail_set_day_total(5, iv);
     } else if (k == MESSAGE_KEY_SERIES_DAY) {
       detail_set_day(iv);
     } else if (k == MESSAGE_KEY_STEPS_SERIES || k == MESSAGE_KEY_SLEEP_SERIES ||

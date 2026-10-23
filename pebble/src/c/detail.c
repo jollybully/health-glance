@@ -58,6 +58,10 @@ static int s_day;        /* 0 today, 1 yesterday ... */
 static bool s_live;      /* heart screen showing the strap instead of the graph */
 static bool s_no_live_hint; /* user asked for live while nothing was streaming */
 static bool s_dirty;     /* series changed since the last flash write */
+/* Totals for the day on screen (sent with that day's charts): steps, asleep,
+ * deep, rem, hr_min, hr_max. */
+static int s_day_totals[6];
+static bool s_day_totals_ok;
 static void clear_series_for(int card);
 static int s_waiting_day = -1; /* day asked of the phone, -1 = none */
 static void (*s_request_day)(int day);
@@ -162,9 +166,15 @@ static void draw_steps(GContext *ctx) {
     return;
   }
   if (peak > 0) {
-    snprintf(a, sizeof a, "%d", peak * 100); /* series is steps/100 per hour */
-    cards_hero_text(ctx, a, HERO_Y);
-    label_left(ctx, "peak hour", GColorDarkGray, UNIT_Y);
+    if (past && s_day_totals_ok) {
+      snprintf(a, sizeof a, "%d", s_day_totals[0]); /* the day's own total */
+      cards_hero_text(ctx, a, HERO_Y);
+      label_left(ctx, "steps", GColorDarkGray, UNIT_Y);
+    } else {
+      snprintf(a, sizeof a, "%d", peak * 100); /* series is steps/100 per hour */
+      cards_hero_text(ctx, a, HERO_Y);
+      label_left(ctx, "peak hour", GColorDarkGray, UNIT_Y);
+    }
     fill(ctx, GColorDarkGray, GRect(X_INSET, CHART_TOP + 8, BW, 1));
     for (int i = 0; i < SERIES_SLOTS; i++) {
       int h = (s_series[CARD_D_STEPS][i] * (BAR_Y - 2 - CHART_TOP)) / peak;
@@ -179,9 +189,19 @@ static void draw_steps(GContext *ctx) {
     label_right(ctx, "no series", GColorDarkGray, UNIT_Y);
   }
 
-  snprintf(a, sizeof a, "%d.%d km · %d cal", g_stats.dist_m / 1000, (g_stats.dist_m % 1000) / 100,
-           g_stats.calories);
-  label_full(ctx, a, GColorBlack, META_Y);
+  if (past) {
+    /* today's distance and calories have no business on a past day's screen */
+    if (s_day_totals_ok) {
+      snprintf(a, sizeof a, "peak %d steps in one hour", peak * 100);
+    } else {
+      snprintf(a, sizeof a, "peak %d steps in one hour", peak * 100);
+    }
+    label_full(ctx, a, GColorBlack, META_Y);
+  } else {
+    snprintf(a, sizeof a, "%d.%d km · %d cal", g_stats.dist_m / 1000,
+             (g_stats.dist_m % 1000) / 100, g_stats.calories);
+    label_full(ctx, a, GColorBlack, META_Y);
+  }
   cue(ctx);
 }
 
@@ -209,8 +229,11 @@ static void draw_sleep(GContext *ctx) {
     cue(ctx);
     return;
   }
-  if (past) {
-    /* deep/rem totals are only known for the last night, so do not imply them */
+  if (past && s_day_totals_ok && s_day_totals[1] > 0) {
+    snprintf(a, sizeof a, "%d:%02d", s_day_totals[1] / 60, s_day_totals[1] % 60);
+    cards_hero_text(ctx, a, HERO_Y);
+    label_left(ctx, "asleep", GColorDarkGray, UNIT_Y);
+  } else if (past) {
     cards_hero_text(ctx, "", HERO_Y);
     label_left(ctx, "sleep stages", GColorDarkGray, UNIT_Y);
   } else {
@@ -235,7 +258,11 @@ static void draw_sleep(GContext *ctx) {
     for (int i = 1; i < 4; i++) {
       if (count[i] > count[most]) most = i;
     }
-    label_right(ctx, STAGE_NAME[most], GColorDarkGray, UNIT_Y);
+    /* Only name the dominant stage when the hero is NOT the asleep total: two
+     * different meanings under one number is what made these screens confusing. */
+    if (!(past && s_day_totals_ok && s_day_totals[1] > 0)) {
+      label_right(ctx, STAGE_NAME[most], GColorDarkGray, UNIT_Y);
+    }
   } else {
     label_right(ctx, "no series", GColorDarkGray, UNIT_Y);
   }
@@ -244,6 +271,10 @@ static void draw_sleep(GContext *ctx) {
     stats_clock_to(t1, sizeof(t1), g_stats.sleep_start);
     stats_clock_to(t2, sizeof(t2), g_stats.sleep_end);
     snprintf(a, sizeof a, "%s-%s · %d:%02d rem", t1, t2, g_stats.rem / 60, g_stats.rem % 60);
+    label_full(ctx, a, GColorBlack, META_Y);
+  } else if (s_day_totals_ok) {
+    snprintf(a, sizeof a, "deep %d:%02d · rem %d:%02d", s_day_totals[2] / 60,
+             s_day_totals[2] % 60, s_day_totals[3] / 60, s_day_totals[3] % 60);
     label_full(ctx, a, GColorBlack, META_Y);
   } else {
     label_full(ctx, "stage timeline", GColorBlack, META_Y);
@@ -330,7 +361,11 @@ static void draw_heart(GContext *ctx) {
     }
   }
 
-  snprintf(a, sizeof a, "min %d · max %d", g_stats.hr_min, g_stats.hr_max);
+  if (s_day > 0 && s_day_totals_ok) {
+    snprintf(a, sizeof a, "min %d · max %d", s_day_totals[4], s_day_totals[5]);
+  } else {
+    snprintf(a, sizeof a, "min %d · max %d", g_stats.hr_min, g_stats.hr_max);
+  }
   label_full(ctx, a, GColorBlack, META_Y);
   cue(ctx);
 }
@@ -543,6 +578,8 @@ bool detail_up(void) {
     if (s_day < 29 && s_request_day) {
       s_day++;
       s_waiting_day = s_day;
+      s_day_totals_ok = false;
+      memset(s_day_totals, 0, sizeof(s_day_totals));
       /* Asking for history means leaving the live view, otherwise the Heart
        * screen keeps drawing the strap gauge and never shows a past day. */
       if (s_card == CARD_D_HEART) s_live = false;
@@ -566,6 +603,8 @@ bool detail_down(void) {
     if (s_day > 0 && s_request_day) {
       s_day--;
       s_waiting_day = s_day;
+      s_day_totals_ok = false;
+      memset(s_day_totals, 0, sizeof(s_day_totals));
       if (s_day == 0) {
         /* today's charts we already hold stay valid */
         s_waiting_day = -1;
@@ -636,6 +675,13 @@ int detail_day(void) { return s_day; }
 /* Drop the charts we are leaving behind. Without this, cycling to a day with no
  * data kept showing the PREVIOUS day's chart under the new day's header, which is
  * worse than showing nothing: the numbers look real and are for the wrong day. */
+void detail_set_day_total(int which, int value) {
+  if (which < 0 || which > 5) return;
+  s_day_totals[which] = value;
+  s_day_totals_ok = true;
+  detail_redraw();
+}
+
 static void clear_series_for(int card) {
   if (card < 0 || card > 3) return;
   memset(s_series[card], 0, SERIES_SLOTS);

@@ -205,16 +205,70 @@ class HealthConnectRepository(private val context: Context) {
             /* A night's stages live between the previous evening and this morning,
              * so ask for the window the watch is actually labelling. */
             val slots = loadSleepStageSlots(client, start.minusSeconds(12 * 3600), end, null)
+            val night = loadNightTotals(client, start.minusSeconds(12 * 3600), end, null)
             Log.i(
                 TAG,
                 "day series offset=$dayOffset steps=${steps.sum()} " +
                     "hrHours=${hr.count { it > 0 }} sleepSlots=${slots.toSet().size} stages",
             )
-            DaySeries(steps = steps, hr = hr, sleepSlots = slots)
+            DaySeries(
+                steps = steps,
+                hr = hr,
+                sleepSlots = slots,
+                stepsTotal = steps.sum(),
+                asleepMinutes = night.first,
+                deepMinutes = night.second,
+                remMinutes = night.third,
+                hrMin = hr.filter { it > 0 }.minOrNull() ?: 0,
+                hrMax = hr.maxOrNull() ?: 0,
+            )
         } catch (e: Exception) {
             Log.w(TAG, "day series failed for offset $dayOffset", e)
             DaySeries()
         }
+    }
+
+    /**
+     * Stage totals for one night, for the past-day Sleep screen. The watch cannot
+     * derive them from 24 stage slots without inventing a night length.
+     */
+    private suspend fun loadNightTotals(
+        client: HealthConnectClient,
+        start: Instant,
+        end: Instant,
+        writer: String?,
+    ): Triple<Int, Int, Int> {
+        val sessions = try {
+            client.readRecords(
+                ReadRecordsRequest(
+                    recordType = SleepSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                ),
+            ).records
+        } catch (e: Exception) {
+            Log.w(TAG, "night totals read failed", e)
+            return Triple(0, 0, 0)
+        }
+        val chosen = WriterPicker.preferOrigin(sessions, writer) { it.metadata.dataOrigin.packageName }
+        val session = chosen.maxByOrNull {
+            Duration.between(it.startTime, it.endTime).toMinutes()
+        } ?: return Triple(0, 0, 0)
+        var deep = 0L
+        var rem = 0L
+        var asleep = 0L
+        for (s in session.stages) {
+            val mins = Duration.between(s.startTime, s.endTime).toMinutes()
+            when (s.stage) {
+                SleepSessionRecord.STAGE_TYPE_DEEP -> { deep += mins; asleep += mins }
+                SleepSessionRecord.STAGE_TYPE_REM -> { rem += mins; asleep += mins }
+                SleepSessionRecord.STAGE_TYPE_LIGHT -> asleep += mins
+                else -> Unit
+            }
+        }
+        if (asleep == 0L) {
+            asleep = Duration.between(session.startTime, session.endTime).toMinutes()
+        }
+        return Triple(asleep.toInt(), deep.toInt(), rem.toInt())
     }
 
     suspend fun seedSampleData() {
@@ -1122,4 +1176,10 @@ data class DaySeries(
     val steps: List<Int> = emptyList(),
     val hr: List<Int> = emptyList(),
     val sleepSlots: List<Int> = emptyList(),
+    val stepsTotal: Int = 0,
+    val asleepMinutes: Int = 0,
+    val deepMinutes: Int = 0,
+    val remMinutes: Int = 0,
+    val hrMin: Int = 0,
+    val hrMax: Int = 0,
 )

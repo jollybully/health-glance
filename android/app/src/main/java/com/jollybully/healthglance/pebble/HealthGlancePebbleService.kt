@@ -65,6 +65,14 @@ class HealthGlancePebbleService : BasePebbleListenerService() {
                 sleep = SeriesCodec.sleepSeries(
                     com.jollybully.healthglance.data.SleepStats(stageSlots = series.sleepSlots),
                 ),
+                totals = DayTotals(
+                    steps = series.stepsTotal,
+                    asleepMinutes = series.asleepMinutes,
+                    deepMinutes = series.deepMinutes,
+                    remMinutes = series.remMinutes,
+                    hrMin = series.hrMin,
+                    hrMax = series.hrMax,
+                ),
                 watches = listOf(watch),
             )
             return ReceiveResult.Ack

@@ -60,6 +60,14 @@ object MessageKeys {
     const val WO_SERIES: UInt = 10050u
     const val WO_HIST: UInt = 10051u
     const val SERIES_DAY: UInt = 10052u
+    /* Totals for the day the watch asked for: a past day needs its own numbers,
+     * not the peak hour and not today's. */
+    const val DAY_STEPS: UInt = 10053u
+    const val DAY_SLEEP_MIN: UInt = 10054u
+    const val DAY_DEEP: UInt = 10055u
+    const val DAY_REM: UInt = 10056u
+    const val DAY_HR_MIN: UInt = 10057u
+    const val DAY_HR_MAX: UInt = 10058u
 
     val WATCH_APP_UUID: java.util.UUID =
         java.util.UUID.fromString("ced3f81d-aaae-4ee4-a49c-885a247644ec")

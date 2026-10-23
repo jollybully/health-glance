@@ -36,6 +36,8 @@ K = {
     "HR_LIVE_STATE": 10044, "HR_LIVE_MIN": 10045, "HR_LIVE_MAX": 10046,
     "STEPS_SERIES": 10047, "SLEEP_SERIES": 10048, "HR_SERIES": 10049,
     "WO_SERIES": 10050, "WO_HIST": 10051, "SERIES_DAY": 10052,
+    "DAY_STEPS": 10053, "DAY_SLEEP_MIN": 10054, "DAY_DEEP": 10055,
+    "DAY_REM": 10056, "DAY_HR_MIN": 10057, "DAY_HR_MAX": 10058,
 }
 
 # 24 hourly slots, sent as byte arrays so six keys cover four charts.
@@ -190,6 +192,13 @@ def main():
                     K["STEPS_SERIES"]: ByteArray(steps),
                     K["HR_SERIES"]: ByteArray(hr),
                     K["SLEEP_SERIES"]: ByteArray(sleep),
+                    # totals, exactly as the companion now sends them
+                    K["DAY_STEPS"]: Uint32(sum(steps) * 100),
+                    K["DAY_SLEEP_MIN"]: Uint32(372 + day * 9),
+                    K["DAY_DEEP"]: Uint32(58 + day * 3),
+                    K["DAY_REM"]: Uint32(84 + day * 4),
+                    K["DAY_HR_MIN"]: Uint32(min(v for v in hr if v > 0)),
+                    K["DAY_HR_MAX"]: Uint32(max(hr)),
                 })
                 print("answered SERIES_DAY %d" % day, flush=True)
             if K["STATS_REQ"] in data:

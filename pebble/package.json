@@ -82,7 +82,13 @@
       "HR_SERIES",
       "WO_SERIES",
       "WO_HIST",
-      "SERIES_DAY"
+      "SERIES_DAY",
+      "DAY_STEPS",
+      "DAY_SLEEP_MIN",
+      "DAY_DEEP",
+      "DAY_REM",
+      "DAY_HR_MIN",
+      "DAY_HR_MAX"
     ],
     "resources": {
       "media": []

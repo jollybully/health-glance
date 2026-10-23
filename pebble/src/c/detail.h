@@ -33,6 +33,8 @@ void detail_draw(GContext *ctx, GRect bounds, int card);
 void detail_set_series(int card, const uint8_t *data, int len);
 void detail_set_workouts(const uint8_t *data, int len);
 void detail_set_day(int day_offset);
+/* 0 steps, 1 asleep, 2 deep, 3 rem, 4 hr_min, 5 hr_max for the day on screen. */
+void detail_set_day_total(int which, int value);
 void detail_set_request_day(void (*fn)(int day));
 bool detail_day_pending(void);
 int detail_day(void);

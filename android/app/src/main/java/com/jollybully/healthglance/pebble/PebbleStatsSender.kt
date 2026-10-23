@@ -22,6 +22,7 @@ interface PebbleStatsSender {
         steps: ByteArray,
         heart: ByteArray,
         sleep: ByteArray,
+        totals: DayTotals,
         watches: List<WatchIdentifier>? = null,
     ): SendOutcome
     suspend fun sendLiveHr(sample: LiveHr.Snapshot, watches: List<WatchIdentifier>? = null): SendOutcome
@@ -61,9 +62,10 @@ class LoggingPebbleStatsSender : PebbleStatsSender {
         steps: ByteArray,
         heart: ByteArray,
         sleep: ByteArray,
+        totals: DayTotals,
         watches: List<WatchIdentifier>?,
     ): SendOutcome {
-        Log.i(TAG, "mock sendDaySeries day=$day steps=${steps.size} hr=${heart.size} sleep=${sleep.size}")
+        Log.i(TAG, "mock sendDaySeries day=$day totals=$totals")
         return SendOutcome.Ok(emptyMap())
     }
 
@@ -108,9 +110,14 @@ class PebbleKitStatsSender(context: Context) : PebbleStatsSender {
         steps: ByteArray,
         heart: ByteArray,
         sleep: ByteArray,
+        totals: DayTotals,
         watches: List<WatchIdentifier>?,
     ): SendOutcome {
-        Log.i(TAG, "sendDaySeries day=$day steps=${steps.size}B hr=${heart.size}B sleep=${sleep.size}B")
+        Log.i(
+            TAG,
+            "sendDaySeries day=$day steps=${totals.steps} asleep=${totals.asleepMinutes} " +
+                "deep=${totals.deepMinutes} hr=${totals.hrMin}-${totals.hrMax}",
+        )
         val dict: PebbleDictionary = mapOf(
             MessageKeys.SERIES_DAY to PebbleDictionaryItem.UInt32(day.toLong().coerceAtLeast(0).toUInt()),
             MessageKeys.STEPS_SERIES to PebbleDictionaryItem.Bytes(steps),
@@ -118,6 +125,13 @@ class PebbleKitStatsSender(context: Context) : PebbleStatsSender {
             /* Sleep was missing here, which is why cycling back on the Sleep screen
              * changed the header and nothing else. */
             MessageKeys.SLEEP_SERIES to PebbleDictionaryItem.Bytes(sleep),
+            /* Totals, so a past day shows ITS numbers rather than the peak hour. */
+            MessageKeys.DAY_STEPS to PebbleDictionaryItem.UInt32(totals.steps.toLong().coerceAtLeast(0).toUInt()),
+            MessageKeys.DAY_SLEEP_MIN to PebbleDictionaryItem.UInt32(totals.asleepMinutes.toLong().coerceAtLeast(0).toUInt()),
+            MessageKeys.DAY_DEEP to PebbleDictionaryItem.UInt32(totals.deepMinutes.toLong().coerceAtLeast(0).toUInt()),
+            MessageKeys.DAY_REM to PebbleDictionaryItem.UInt32(totals.remMinutes.toLong().coerceAtLeast(0).toUInt()),
+            MessageKeys.DAY_HR_MIN to PebbleDictionaryItem.UInt32(totals.hrMin.toLong().coerceAtLeast(0).toUInt()),
+            MessageKeys.DAY_HR_MAX to PebbleDictionaryItem.UInt32(totals.hrMax.toLong().coerceAtLeast(0).toUInt()),
         )
         return transmit(dict, watches)
     }
@@ -241,3 +255,13 @@ internal fun seriesDictionary(stats: GlanceStats): PebbleDictionary {
     }.toMap()
     return dict + (MessageKeys.SERIES_DAY to PebbleDictionaryItem.UInt32(0u))
 }
+
+/** A past day's totals, sent alongside its charts. */
+data class DayTotals(
+    val steps: Int = 0,
+    val asleepMinutes: Int = 0,
+    val deepMinutes: Int = 0,
+    val remMinutes: Int = 0,
+    val hrMin: Int = 0,
+    val hrMax: Int = 0,
+)
