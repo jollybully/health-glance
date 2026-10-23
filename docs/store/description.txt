@@ -1,24 +1,15 @@
-I wanted to see my Fitbit Air data on my Pebble, and I didn't want to use the watch's own health
-stuff. So I vibed this out to solve that problem. We truly are living in an age of digital
-abundance.
+I wanted to see my Fitbit Air data on my Pebble, and I didn't want to use the watch's own health stuff. So I vibed this out to solve that problem. We truly are living in an age of digital abundance.
 
-Four cards: steps, sleep, heart rate and your last workout, straight from Health Connect. One big
-number on each, the useful detail underneath, and a swipe or a button to move between them.
+Four cards: steps, sleep, heart rate and your last workout, straight from Health Connect. One big number on each, the useful detail underneath, and a swipe or a button to move between them.
 
-It's deliberately small. No charts, no paging back through days, nothing to set up on the watch.
-I had all of that in an earlier build and never once read it on a wrist.
+It's deliberately small. No charts, no paging back through days, nothing to set up on the watch. I had all of that in an earlier build and never once read it on a wrist.
 
-Got a chest strap, or a watch set to broadcast the standard Bluetooth heart-rate service? The Heart
-card shows your live pulse and the screen edge beats with it, at your actual rate. It stops the
-moment samples go stale rather than passing off an old number as live.
+The step goal is set in the companion app, because Health Connect stores steps but has no concept of a target.
 
-Needs the Android companion app, sideloaded from the project's releases page, because the watch
-can't talk to a strap or to Health Connect on its own. Read-only permissions, no account, no server,
-no analytics: it goes phone to watch and stops there.
+Got a chest strap, or a watch set to broadcast the standard Bluetooth heart-rate service? The Heart card shows your live pulse and the screen edge beats with it, at your actual rate. It stops the moment samples go stale rather than passing off an old number as live.
 
-Health Connect wants Android 8 or newer. The watch app is native C, 41 KB, and runs on the Pebble
-Time 2 and the Pebble Round 2. Same four cards either way: on the round one the card is laid out
-inside the circle so the numbered band and the footer stay off the bezel.
+Needs the Android companion app, sideloaded from the project's releases page, because the watch can't talk to a strap or to Health Connect on its own. Read-only permissions, no account, no server, no analytics: it goes phone to watch and stops there.
 
-Warning: certified vibe coded slop. Written with AI agents under human direction, then tested on
-real hardware. Every screenshot here is a real capture from the watch.
+Health Connect wants Android 8 or newer. The watch app is native C, 41 KB, and runs on the Pebble Time 2 and the Pebble Round 2. Same four cards either way: on the round one the card is laid out inside the circle so the numbered band and the footer stay off the bezel.
+
+Warning: certified vibe coded slop. Written with AI agents under human direction, then tested on real hardware. Every screenshot here is a real capture from the watch.
