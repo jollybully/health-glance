@@ -1,25 +1,25 @@
 #pragma once
 #include <pebble.h>
 
-/* Full Deck Push: two full-screen card layers slide past each other inside one
- * Animation, with a 4px black seam riding the join. dir > 0 pushes up
- * (next card enters from the bottom), dir < 0 pushes down. */
+/* The deck's only transition: a pin unfolds into a card, and a card folds back
+ * into a pin. See anim.c for why it is shaped that way. */
 
 typedef void (*AnimDone)(void *ctx);
 
 bool anim_busy(void);
-void anim_push(Layer *incoming, Layer *outgoing, Layer *seam, int dir, int w, int h,
-               AnimDone done, void *ctx);
-/* Put the incoming card back where a drag pulled it from (drag did not commit). */
-void anim_retreat(Layer *incoming, Layer *outgoing, Layer *seam, int dir, int w, int h,
-                  AnimDone done, void *ctx);
+int anim_pin_h(void);
+
+/* Live drag: place the incoming card's band at an arbitrary height (pin..full). */
+void anim_set_band(Layer *incoming, int band, int w, int h);
+
+/* The deck move: fold the current card up into its header, then unroll the next
+ * one out of that header. Nothing overlaps, and the pin is a visible handover. */
+void anim_transition(Layer *incoming, Layer *outgoing, int w, int h, AnimDone done, void *ctx);
+
+/* Grow the incoming card from its current band to a full card, overshoot, settle. */
+void anim_unfold(Layer *incoming, int w, int h, AnimDone done, void *ctx);
+
+/* Collapse the incoming card back into its pin and hide it. */
+void anim_refold(Layer *incoming, int w, int h, AnimDone done, void *ctx);
+
 void anim_cancel(void);
-
-/* Classic Pebble squash and stretch: the contents of `l` compress, overshoot and
- * settle, keeping their volume (a 12% squash widens by ~13%). Used when a card
- * lands, e.g. after the launch drop. */
-void anim_squash_settle(Layer *l, AnimDone done, void *ctx);
-
-/* Live deformation while a finger is dragging the deck: the harder the card is
- * pulled, the more it compresses. Called every position update. */
-void anim_squash_drag(Layer *incoming, Layer *outgoing, int dy, int h);

@@ -10,6 +10,9 @@
 #define HG_CACHE_PROBE 0
 #endif
 
+#ifndef HG_BAND_PROBE
+#define HG_BAND_PROBE 0
+#endif
 #ifndef HG_SQUASH_PROBE
 #define HG_SQUASH_PROBE 0
 #endif
@@ -22,7 +25,7 @@
 
 static Window *s_window;
 static Layer *s_card[2];
-static Layer *s_seam;
+/* No seam: nothing slides, so there is no join to mark. */
 static int s_front;   /* index of the visible card layer */
 static int s_card_idx; /* card currently shown */
 static int s_w, s_h;
@@ -68,25 +71,19 @@ static void mock_back(ClickRecognizerRef r, void *ctx) {
 
 static void card_update(Layer *l, GContext *ctx) {
   CardLayer *d = (CardLayer *)layer_get_data(l);
-#if HG_SQUASH_PROBE
-  /* QA only: hold a fixed squash so the deformation can be measured against the
-   * identity frame instead of argued about from a moving animation. */
-  cards_draw_warp(ctx, layer_get_bounds(l), d->card, HG_SQUASH_PROBE);
+#if HG_BAND_PROBE
+  /* QA only: hold a band height so the pin geometry can be measured. */
+  cards_draw_band(ctx, GRect(0, 0, s_w, HG_BAND_PROBE), d->card);
   return;
 #endif
-  cards_draw_warp(ctx, layer_get_bounds(l), d->card, d->lag);
+  cards_draw_band(ctx, layer_get_bounds(l), d->card);
 }
 
-static void seam_update(Layer *l, GContext *ctx) {
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_rect(ctx, layer_get_bounds(l), 0, GCornerNone);
-}
 
 static Layer *make_card_layer(GRect frame, int card) {
   Layer *l = layer_create_with_data(frame, sizeof(CardLayer));
   CardLayer *d = (CardLayer *)layer_get_data(l);
   d->card = card;
-  d->lag = 0;
   layer_set_update_proc(l, card_update);
   return l;
 }
@@ -105,65 +102,37 @@ static void push_done(void *ctx) {
 #ifndef HG_LAUNCH_MS
 #define HG_LAUNCH_MS 220
 #endif
-static Animation *s_launch;
 
-static void launch_stopped(Animation *a, bool finished, void *ctx) {
-  (void)a;
-  (void)finished;
-  (void)ctx;
-  s_launch = NULL;
-  layer_set_frame(s_card[0], GRect(0, 0, s_w, s_h));
-  APP_LOG(APP_LOG_LEVEL_INFO, "launch slide settled at y=%d", layer_get_frame(s_card[0]).origin.y);
-  /* It lands rather than simply arriving: the contents compress on contact and
-   * spring back, which is the squash that sells the weight of the card. */
-  anim_squash_settle(s_card[0], NULL, NULL);
-}
 
 static void launch_anim_start(void) {
-  layer_set_frame(s_card[0], GRect(0, -s_h, s_w, s_h)); /* starts above the glass */
-  GRect f0 = layer_get_frame(s_card[0]);
-  APP_LOG(APP_LOG_LEVEL_INFO, "launch slide from y=%d to y=0 over %d ms", f0.origin.y,
-          HG_LAUNCH_MS);
+  /* The app opens the way every other move works: its header appears as a pin at
+   * the top edge, then the card unrolls out of it. */
+  anim_set_band(s_card[0], anim_pin_h(), s_w, s_h);
+  APP_LOG(APP_LOG_LEVEL_INFO, "launch: unfold from pin %d px", anim_pin_h());
 #if HG_LAUNCH_HOLD
-  return; /* probe build: hold the first frame for a screenshot */
+  return; /* probe build: hold the pinned state for a screenshot */
 #endif
-  GRect to = GRect(0, 0, s_w, s_h);
-  PropertyAnimation *pa = property_animation_create_layer_frame(s_card[0], NULL, &to);
-  s_launch = property_animation_get_animation(pa);
-  animation_set_duration(s_launch, HG_LAUNCH_MS);
-  animation_set_curve(s_launch, AnimationCurveEaseOut);
-  animation_set_handlers(s_launch, (AnimationHandlers){.stopped = launch_stopped}, NULL);
-  animation_schedule(s_launch);
-  cards_warp_start(s_card[0]); /* the numbers warp in as the deck rises */
+  anim_unfold(s_card[0], s_w, s_h, NULL, NULL);
+  cards_warp_start(s_card[0]); /* the hero numbers warp as the body unrolls */
 }
 
+/* Move to another card by unfolding it out of a pin at the top edge. The pin
+ * carries the incoming card's own cap colour, so the header stays put while the
+ * body unrolls under it — no rectangle crosses the glass. */
 static void push(int to, int dir) {
+  (void)dir; /* direction is implied: the pin is always the top edge */
   if (anim_busy() || to < 0 || to >= CARD_COUNT || to == s_card_idx) return;
 
-  if (s_launch) { /* a press during the launch slide cancels it, snapping home */
-    animation_unschedule(s_launch);
-    s_launch = NULL;
-    layer_set_frame(s_card[0], GRect(0, 0, s_w, s_h));
-  }
+  if (anim_busy()) return; /* one move at a time */
 
   pulse_set_card(to); /* the pulse belongs to the Heart card, nowhere else */
-  int in = 1 - s_front, out = s_front;
+  const int in = 1 - s_front, out = s_front;
   Layer *li = s_card[in], *lo = s_card[out];
 
-  layer_set_frame(li, GRect(0, dir > 0 ? s_h : -s_h, s_w, s_h));
   ((CardLayer *)layer_get_data(li))->card = to;
-  layer_set_hidden(li, false);
-  layer_mark_dirty(li);
-
-  layer_set_frame(lo, GRect(0, 0, s_w, s_h));
-  layer_set_hidden(lo, false);
-
-  layer_set_frame(s_seam, GRect(0, dir > 0 ? s_h : -4, s_w, 4));
-  layer_set_hidden(s_seam, false);
-
-  /* The card warps as it arrives: stretch, squash, settle. */
-  cards_warp_start(li);
-  anim_push(li, lo, s_seam, dir, s_w, s_h, push_done, NULL);
+  layer_insert_above_sibling(li, lo); /* the unfolding card covers the old one */
+  cards_warp_start(li); /* the numbers warp as the body unrolls */
+  anim_transition(li, lo, s_w, s_h, push_done, NULL);
 }
 
 /* ---------------- touch scrolling ---------------- */
@@ -182,43 +151,38 @@ static bool s_drag;
 static int s_drag_x0, s_drag_y0;
 static int s_drag_dir; /* 0 undecided, -1 next-from-top, +1 previous-from-bottom */
 static int s_drag_dy;
+static int s_drag_band; /* live band height of the card being unrolled */
+
+/* How far the finger has to travel to unroll a whole card. Less than the screen:
+ * a short pull should already show most of the next card, so the gesture reads as
+ * flicking a pin open rather than dragging a sheet of paper. */
+#define UNFOLD_PX 120
 
 static void drag_apply(int dy) {
-  if (s_drag_dir < 0) {
-    if (dy < 0) dy = 0;
-    if (dy > s_h) dy = s_h;
-  } else {
-    if (dy > 0) dy = 0;
-    if (dy < -s_h) dy = -s_h;
-  }
+  int travel = dy < 0 ? -dy : dy;
+  if (travel > UNFOLD_PX) travel = UNFOLD_PX;
   s_drag_dy = dy;
 
-  int in = 1 - s_front;
-  int y_in = (s_drag_dir < 0 ? -s_h : s_h) + dy;
-  int join = s_drag_dir < 0 ? y_in + s_h : y_in;
-  layer_set_frame(s_card[in], GRect(0, y_in, s_w, s_h));
-  layer_set_frame(s_card[s_front], GRect(0, s_drag_dir < 0 ? join : join - s_h, s_w, s_h));
-  layer_set_frame(s_seam, GRect(0, join, s_w, 4));
-  layer_set_hidden(s_seam, false);
-  anim_squash_drag(s_card[in], s_card[s_front], dy, s_h);
+  const int pin = anim_pin_h();
+  const int band = pin + (travel * (s_h - pin)) / UNFOLD_PX;
+  anim_set_band(s_card[1 - s_front], band, s_w, s_h);
+  s_drag_band = band;
 }
 
 static void drag_pick_direction(int dir) {
   int to = s_card_idx + (dir < 0 ? 1 : -1);
-  if (to < 0 || to >= CARD_COUNT) return; /* nothing to pull in that way */
-  int in = 1 - s_front;
-  layer_set_frame(s_card[in], GRect(0, dir < 0 ? -s_h : s_h, s_w, s_h));
+  if (to < 0 || to >= CARD_COUNT) return; /* nothing to unroll that way */
+  const int in = 1 - s_front;
   ((CardLayer *)layer_get_data(s_card[in]))->card = to;
-  layer_set_hidden(s_card[in], false);
-  layer_mark_dirty(s_card[in]);
-  layer_set_frame(s_card[s_front], GRect(0, 0, s_w, s_h));
-  layer_set_hidden(s_card[s_front], false);
+  layer_insert_above_sibling(s_card[in], s_card[s_front]);
+  anim_set_band(s_card[in], anim_pin_h(), s_w, s_h);
   s_drag_dir = dir;
+  s_drag_band = anim_pin_h();
 }
 
-static void drag_retreat_done(void *ctx) {
+static void drag_refold_done(void *ctx) {
   (void)ctx;
-  layer_mark_dirty(s_card[s_front]);
+  layer_mark_dirty(s_card[s_front]); /* the card underneath was never touched */
 }
 
 static void touch_handler(const TouchEvent *event, void *context) {
@@ -254,17 +218,17 @@ static void touch_handler(const TouchEvent *event, void *context) {
   if (event->type == TouchEvent_Liftoff) {
     s_drag = false;
     if (s_drag_dir == 0) return;
-    int travel = s_drag_dir < 0 ? s_drag_dy : -s_drag_dy;
-    int in = 1 - s_front;
-    if (travel * DRAG_COMMIT_DIV >= s_h) {
+    const int in = 1 - s_front;
+    /* Past a third of the glass the pin is open far enough to mean it. */
+    if (s_drag_band * 3 >= s_h) {
       cards_warp_start(s_card[in]);
-      anim_push(s_card[in], s_card[s_front], s_seam, s_drag_dir, s_w, s_h, push_done, NULL);
+      anim_unfold(s_card[in], s_w, s_h, push_done, NULL);
     } else {
-      anim_retreat(s_card[in], s_card[s_front], s_seam, s_drag_dir, s_w, s_h,
-                   drag_retreat_done, NULL);
+      anim_refold(s_card[in], s_w, s_h, drag_refold_done, NULL);
     }
     s_drag_dir = 0;
     s_drag_dy = 0;
+    s_drag_band = anim_pin_h();
   }
 }
 
@@ -617,13 +581,9 @@ static void window_load(Window *w) {
   s_card[1] = make_card_layer(GRect(0, 0, s_w, s_h), 0);
   layer_set_hidden(s_card[1], true);
 
-  s_seam = layer_create(GRect(0, -4, s_w, 4));
-  layer_set_update_proc(s_seam, seam_update);
-  layer_set_hidden(s_seam, true);
 
   layer_add_child(root, s_card[1]);
   layer_add_child(root, s_card[0]);
-  layer_add_child(root, s_seam); /* seam on top of both cards */
   pulse_init(root, b);  /* live-rate frame, shown on the Heart card only */
   pulse_set_card(s_card_idx);
 
@@ -671,17 +631,11 @@ static void window_unload(Window *w) {
   }
   return;
 #endif
-  if (s_launch) {
-    animation_unschedule(s_launch);
-    s_launch = NULL;
-  }
   cards_warp_cancel();
   anim_cancel();
   pulse_deinit();
-  layer_destroy(s_seam);
   layer_destroy(s_card[0]);
   layer_destroy(s_card[1]);
-  s_seam = NULL;
   s_card[0] = s_card[1] = NULL;
 }
 

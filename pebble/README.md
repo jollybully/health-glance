@@ -7,14 +7,23 @@ ported to C) + Gothic Bold 24/18. Shared title/hero/unit slots.
 
 Four cards and nothing else: no drill-down screens, no charts, no day-by-day history.
 
-**Motion.** The card's contents move on their own curve, the way PebbleOS animates a timeline icon
-through different frames than the card it sits on. The cap stays bolted to the card; displacement
-grows with distance below it, so the top of the content barely moves while the bottom trails. Rows
-that get pulled apart narrow by the same ratio, so the sheet keeps its area and the deformation
-never reads as a zoom. Through a page turn the contents snap out to full lag, catch up, overshoot
-past rest and settle; dragging deforms the card under the finger; the launch slide lands with the
-same ripple. Measured with a held field: at +34 px lag the content top moves 1 px while its bottom
-moves 25 px.
+**Motion.** One mechanic, borrowed from how PebbleOS treats a timeline item: a card exists as a
+pin — a strip carrying its header and colour — and moves happen by folding a card into that pin and
+unfolding one out of it. Nothing slides a full-screen rectangle past another.
+
+- Pressing a button **tucks the current card down into its pin**, which uncovers the next card from
+  its header downward. Uncovering the other way round showed a body with no header for a few frames.
+- Entering the app, or pulling with a finger, **unfolds a pin into a card**: the header arrives
+  first and the body unrolls under it, overshooting slightly before it settles.
+- A finger drag sets the band height directly, so the release point is a position the user chose,
+  past a third open it commits, otherwise it refolds.
+- The distortion is geometric rather than applied: the pin keeps a floor height while the body is
+  squeezed away, rows that are squeezed narrow by the same ratio, and content appears in stages at
+  the sizes where it can actually be read. Carrying the whole layout down to 7px produced a black
+  smear where the hero digits used to be.
+
+Timings: fold 110 ms ease-in, unfold 170 ms ease-out, 60 ms settle. Frames at 1600 ms in
+docs/images/pin-fold-unfold-frames.png and pin-fold-unfold.gif.
 
 Stats come from the Android companion (`../android`) via PebbleKit AppMessages. There is no PKJS.
 

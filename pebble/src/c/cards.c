@@ -151,7 +151,7 @@ static const uint8_t GLYPH[100] = {
      32,  32,  32,  32,
 };
 
-static GRect warp_rect(GRect r); /* the motion field, defined below */
+static GRect band_rect(GRect r); /* band mapping, defined below */
 
 static void draw_hero_at_scaled(GContext *ctx, const char *text, int y0, int pm_x, int pm_y) {
   (void)pm_x;
@@ -184,7 +184,7 @@ static void draw_hero_at_scaled(GContext *ctx, const char *text, int y0, int pm_
           int warped_h = ((GLYPH[p + 3] - 32) * s_hero_pm) / 1000;
           if (warped_h < 1) warped_h = 1;
           GRect stroke = GRect(x + GLYPH[p] - 32, warped_top, GLYPH[p + 2] - 32, warped_h);
-          fill(ctx, (hole_mask & bit) ? GColorWhite : GColorBlack, warp_rect(stroke));
+          fill(ctx, (hole_mask & bit) ? GColorWhite : GColorBlack, band_rect(stroke));
         }
       }
     }
@@ -193,48 +193,78 @@ static void draw_hero_at_scaled(GContext *ctx, const char *text, int y0, int pm_
 }
 
 void cards_draw(GContext *ctx, GRect bounds, int card) {
-  cards_draw_warp(ctx, bounds, card, 0);
+  cards_draw_band(ctx, bounds, card);
 }
 
-/* Warp field.
+/* Band mapping — the pin, and the card that unfolds out of it.
  *
- * PebbleOS does not scale an icon when a timeline item opens: it moves the icon
- * through its own frames on its own interpolation, so the icon visibly lags the
- * card and catches up. The effect is a sheet being pulled rather than a picture
- * being zoomed.
+ * PebbleOS never slides a full-screen card past another one. A timeline item
+ * exists as a pin: a short strip carrying its icon and colour. Opening it grows
+ * that pin into a card, and closing it collapses the card back into the pin.
+ * The distortion is inherent, because the pin keeps its height while everything
+ * below it is squeezed into nothing.
  *
- * Same idea here. The cap is bolted to the card; displacement grows with
- * distance below it, so the top of the content barely moves and the bottom
- * trails by `lag`. Where a row is pulled apart it narrows by the same ratio, so
- * the deformation keeps its area and never reads as a zoom. */
-static int s_lag;
-static int s_w, s_h;
+ * So a card is drawn into whatever band its layer currently occupies:
+ *   - the cap keeps a floor of PIN_H, so the pin always reads as a header strip
+ *   - the body absorbs the rest of the compression
+ *   - rows that end up compressed narrow by the same ratio (area is kept)
+ *   - text stops being drawn once the body is too small to read, leaving a clean
+ *     coloured pin instead of a smear
+ * At full height every mapping is the identity, so a settled card is unchanged.
+ */
+#define PIN_H 7
 
-static int warp_off(int y) {
-  if (s_lag == 0) return 0; /* at rest the field is exactly the identity */
-  if (y <= CAP_H) return 0;
-  const int span = s_h - CAP_H;
-  if (span <= 0) return 0;
-  int d = y - CAP_H;
-  if (d > span) d = span;
-  return (s_lag * d) / span;
+static int s_w, s_h_full, s_h_band;
+
+/* The cap does not shrink in step with the card. It stays a pin until the card is
+ * open far enough to carry its title, then takes up the rest of the growth: a
+ * title drawn into a 16px cap spills white-on-white into the body and reads as a
+ * clipping bug, so below that height the pin is a clean colour strip instead. */
+#define CAP_READABLE 24
+#define PIN_UNTIL 90 /* band height at which the cap starts growing again */
+
+static int band_cap_h(void) {
+  if (s_h_band >= s_h_full) return CAP_H;
+  if (s_h_band <= PIN_UNTIL) return PIN_H;
+  const int span = s_h_full - PIN_UNTIL;
+  int cap = CAP_READABLE + ((CAP_H - CAP_READABLE) * (s_h_band - PIN_UNTIL)) / span;
+  if (cap > CAP_H) cap = CAP_H;
+  return cap;
 }
 
-/* Vertical stretch factor implied by the field, as a per-mille reciprocal. */
-static int warp_xs(void) {
-  const int span = s_h - CAP_H;
-  if (span <= 0) return 1000;
-  int denom = span + s_lag;
-  if (denom < span / 3) denom = span / 3;
-  return (1000 * span) / denom;
+/* per mille: how much of the body's natural height survives */
+static int band_body_pm(void) {
+  const int body_full = s_h_full - CAP_H;
+  const int body_now = s_h_band - band_cap_h();
+  if (body_full <= 0 || body_now <= 0) return 0;
+  int pm = (1000 * body_now) / body_full;
+  if (pm > 1000) pm = 1000;
+  return pm;
 }
 
-static GRect warp_rect(GRect r) {
-  int top = r.origin.y + warp_off(r.origin.y);
-  int bot = r.origin.y + r.size.h + warp_off(r.origin.y + r.size.h);
+static int band_y(int y) {
+  if (s_h_band >= s_h_full) return y;
+  const int cap = band_cap_h();
+  if (y <= CAP_H) return (y * cap) / CAP_H;
+  const int pm = band_body_pm();
+  return cap + ((y - CAP_H) * pm) / 1000;
+}
+
+/* Where rows are squeezed vertically they widen... no: squeezed rows narrow. */
+static int band_xs(void) {
+  const int pm = band_body_pm();
+  if (pm <= 0) return 1000;
+  int xs = (1000 * 1000) / pm;
+  if (xs > 1180) xs = 1180;
+  return xs;
+}
+
+static GRect band_rect(GRect r) {
+  int top = band_y(r.origin.y);
+  int bot = band_y(r.origin.y + r.size.h);
   int nh = bot - top;
   if (nh < 1) nh = 1;
-  const int xs = warp_xs();
+  const int xs = band_xs();
   const int cx = s_w / 2;
   int nx = cx + ((r.origin.x - cx) * xs) / 1000;
   int nw = (r.size.w * xs) / 1000;
@@ -242,35 +272,41 @@ static GRect warp_rect(GRect r) {
   return GRect(nx, top, nw, nh);
 }
 
-static int warp_y(int y) { return y + warp_off(y); }
+/* Content appears in stages as the pin opens, each at the size where it can
+ * actually be read. The alternative — draw everything and let it be illegible, or
+ * draw nothing until it is at full size — gives either a smear or a blank strip,
+ * and a blank strip was the first thing that looked broken in testing. */
+static bool show_title(void) { return band_cap_h() >= CAP_READABLE; }
+static bool show_pips(void) { return band_cap_h() >= CAP_READABLE + 4; }
+static bool show_hero(void) { return band_body_pm() >= 550; }
+static bool show_detail(void) { return band_body_pm() >= 620; }
 
-void cards_set_lag(int lag) { s_lag = lag; }
-int cards_get_lag(void) { return s_lag; }
-
-void cards_draw_warp(GContext *ctx, GRect bounds, int card, int lag) {
+void cards_draw_band(GContext *ctx, GRect bounds, int card) {
   const int w = bounds.size.w, h = bounds.size.h;
   const int bw = w - 2 * X_INSET;
   char hero[24], meta[128], tmp1[16], tmp2[16];
-  s_lag = lag;
   s_w = w;
-  s_h = h;
-  /* Everything below the cap rides the field; the cap and the page itself do
-   * not move, which is what pins the distortion to the content. */
-  #define SQ(y) warp_y(y)
-  #define WF(r) warp_rect(r)
+  s_h_full = 228; /* the canonical card; the layer frame is what varies */
+  s_h_band = h;
+  #define SQ(y) band_y(y)
+  #define WF(r) band_rect(r)
 
   fill(ctx, GColorWhite, GRect(0, 0, w, h));
-  fill(ctx, CAP[card], GRect(0, 0, w, CAP_H));
+  fill(ctx, CAP[card], GRect(0, 0, w, band_cap_h()));
   /* y=1 puts the cap title ink at 11..24, matching the Alloy cards exactly. */
-  text(ctx, card_title(card), s_f_title, GColorWhite, X_INSET, 1, bw - 40, 32);
-  draw_pips(ctx, w, card);
+  if (show_title()) {
+    text(ctx, card_title(card), s_f_title, GColorWhite, X_INSET, (1 * band_cap_h()) / CAP_H,
+         bw - 40, 32);
+  }
+  if (show_pips()) draw_pips(ctx, w, card);
 
   hero_str(hero, sizeof(hero), card);
-  draw_hero_at_scaled(ctx, hero, HERO_Y, 1000, 1000);
+  if (show_hero()) draw_hero_at_scaled(ctx, hero, HERO_Y, 1000, 1000);
 
-  text(ctx, stats_footer(), s_f_body, GColorDarkGray, X_INSET, SQ(CUE_Y), bw, 22);
+  if (show_detail()) text(ctx, stats_footer(), s_f_body, GColorDarkGray, X_INSET, SQ(CUE_Y), bw, 22);
 
   if (card == CARD_STEPS) {
+    if (!show_detail()) return;
     text(ctx, "steps today", s_f_body, GColorDarkGray, X_INSET, SQ(UNIT_Y), bw, 22);
     fill(ctx, GColorLightGray, WF(GRect(X_INSET, BAR_Y, bw, BAR_H)));
     int pct = g_stats.steps > 0 ? (g_stats.steps * bw) / STEP_GOAL : 0;
@@ -284,15 +320,17 @@ void cards_draw_warp(GContext *ctx, GRect bounds, int card, int lag) {
     }
     text(ctx, meta, s_f_body, GColorBlack, X_INSET, SQ(META_Y), bw, 22);
   } else if (card == CARD_SLEEP) {
+    if (!show_detail()) return;
     int v[4] = {g_stats.deep, g_stats.light, g_stats.rem, g_stats.awake};
     text(ctx, "asleep", s_f_body, GColorDarkGray, X_INSET, SQ(UNIT_Y), bw, 22);
-    draw_parts(ctx, warp_y(BAR_Y), w, v, STAGE);
+    draw_parts(ctx, band_y(BAR_Y), w, v, STAGE);
     char t1[8], t2[8];
     stats_clock_to(t1, sizeof(t1), g_stats.sleep_start);
     stats_clock_to(t2, sizeof(t2), g_stats.sleep_end);
     snprintf(meta, sizeof(meta), "%s -> %s", t1, t2);
     text(ctx, meta, s_f_body, GColorBlack, X_INSET, SQ(META_Y), bw, 22);
   } else if (card == CARD_HEART) {
+    if (!show_detail()) return;
     /* While the strap streams, the card says so: a filled pip in the cap plus the
      * live rate in the meta line. The hero stays resting bpm so the card keeps
      * meaning what it always meant. */
@@ -324,7 +362,7 @@ void cards_draw_warp(GContext *ctx, GRect bounds, int card, int lag) {
     text(ctx, "duration", s_f_body, GColorDarkGray, X_INSET, SQ(UNIT_Y), bw, 22);
     if (g_stats.wo_lo + g_stats.wo_mid + g_stats.wo_hi > 0) {
       int v[4] = {g_stats.wo_lo, g_stats.wo_mid, g_stats.wo_hi, 0};
-      draw_parts(ctx, warp_y(BAR_Y), w, v, ZONE);
+      draw_parts(ctx, band_y(BAR_Y), w, v, ZONE);
     } else {
       fill(ctx, GColorOrange, WF(GRect(X_INSET, BAR_Y, bw, BAR_H)));
     }
