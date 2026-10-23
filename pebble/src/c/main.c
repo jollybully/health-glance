@@ -10,6 +10,9 @@
 #define HG_CACHE_PROBE 0
 #endif
 
+#ifndef HG_SQUASH_PROBE
+#define HG_SQUASH_PROBE 0
+#endif
 #ifndef HG_TOUCH_SELFTEST
 #define HG_TOUCH_SELFTEST 0
 #endif
@@ -64,7 +67,15 @@ static void mock_back(ClickRecognizerRef r, void *ctx) {
 /* ---------------- card layers ---------------- */
 
 static void card_update(Layer *l, GContext *ctx) {
-  cards_draw(ctx, layer_get_bounds(l), *(int *)layer_get_data(l));
+  CardLayer *d = (CardLayer *)layer_get_data(l);
+#if HG_SQUASH_PROBE
+  /* QA only: hold a fixed squash so the deformation can be measured against the
+   * identity frame instead of argued about from a moving animation. */
+  cards_draw_squash(ctx, layer_get_bounds(l), d->card, 1000 * 1000 / HG_SQUASH_PROBE,
+                    HG_SQUASH_PROBE);
+  return;
+#endif
+  cards_draw_squash(ctx, layer_get_bounds(l), d->card, d->pm_x, d->pm_y);
 }
 
 static void seam_update(Layer *l, GContext *ctx) {
@@ -73,8 +84,11 @@ static void seam_update(Layer *l, GContext *ctx) {
 }
 
 static Layer *make_card_layer(GRect frame, int card) {
-  Layer *l = layer_create_with_data(frame, sizeof(int));
-  *(int *)layer_get_data(l) = card;
+  Layer *l = layer_create_with_data(frame, sizeof(CardLayer));
+  CardLayer *d = (CardLayer *)layer_get_data(l);
+  d->card = card;
+  d->pm_x = 1000;
+  d->pm_y = 1000;
   layer_set_update_proc(l, card_update);
   return l;
 }
@@ -84,7 +98,7 @@ static Layer *make_card_layer(GRect frame, int card) {
 static void push_done(void *ctx) {
   (void)ctx;
   s_front = 1 - s_front;
-  s_card_idx = *(int *)layer_get_data(s_card[s_front]);
+  s_card_idx = ((CardLayer *)layer_get_data(s_card[s_front]))->card;
   layer_mark_dirty(s_card[s_front]);
 }
 
@@ -102,6 +116,9 @@ static void launch_stopped(Animation *a, bool finished, void *ctx) {
   s_launch = NULL;
   layer_set_frame(s_card[0], GRect(0, 0, s_w, s_h));
   APP_LOG(APP_LOG_LEVEL_INFO, "launch slide settled at y=%d", layer_get_frame(s_card[0]).origin.y);
+  /* It lands rather than simply arriving: the contents compress on contact and
+   * spring back, which is the squash that sells the weight of the card. */
+  anim_squash_settle(s_card[0], NULL, NULL);
 }
 
 static void launch_anim_start(void) {
@@ -136,7 +153,7 @@ static void push(int to, int dir) {
   Layer *li = s_card[in], *lo = s_card[out];
 
   layer_set_frame(li, GRect(0, dir > 0 ? s_h : -s_h, s_w, s_h));
-  *(int *)layer_get_data(li) = to;
+  ((CardLayer *)layer_get_data(li))->card = to;
   layer_set_hidden(li, false);
   layer_mark_dirty(li);
 
@@ -185,6 +202,7 @@ static void drag_apply(int dy) {
   layer_set_frame(s_card[s_front], GRect(0, s_drag_dir < 0 ? join : join - s_h, s_w, s_h));
   layer_set_frame(s_seam, GRect(0, join, s_w, 4));
   layer_set_hidden(s_seam, false);
+  anim_squash_drag(s_card[in], s_card[s_front], dy, s_h);
 }
 
 static void drag_pick_direction(int dir) {
@@ -192,7 +210,7 @@ static void drag_pick_direction(int dir) {
   if (to < 0 || to >= CARD_COUNT) return; /* nothing to pull in that way */
   int in = 1 - s_front;
   layer_set_frame(s_card[in], GRect(0, dir < 0 ? -s_h : s_h, s_w, s_h));
-  *(int *)layer_get_data(s_card[in]) = to;
+  ((CardLayer *)layer_get_data(s_card[in]))->card = to;
   layer_set_hidden(s_card[in], false);
   layer_mark_dirty(s_card[in]);
   layer_set_frame(s_card[s_front], GRect(0, 0, s_w, s_h));

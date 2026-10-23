@@ -151,7 +151,7 @@ static const uint8_t GLYPH[100] = {
      32,  32,  32,  32,
 };
 
-static void draw_hero_at(GContext *ctx, const char *text, int y0) {
+static void draw_hero_at_scaled(GContext *ctx, const char *text, int y0, int pm_x, int pm_y) {
   int x = X_INSET;
   const int cy = y0 + HERO_BLOCK_H / 2; /* warp pivot: the middle of the digits */
   for (int i = 0; text[i]; i++) {
@@ -172,11 +172,17 @@ static void draw_hero_at(GContext *ctx, const char *text, int y0) {
         if ((fill_mask | hole_mask) & bit) {
           int p = b * 4;
           int top = y0 + GLYPH[p + 1] - 32;
-          int warped_top = cy + ((top - cy) * s_hero_pm) / 1000;
-          int warped_h = ((GLYPH[p + 3] - 32) * s_hero_pm) / 1000;
+          /* Squash and stretch: the digit block scales on both axes, the way a
+           * rubber object keeps its volume when it is compressed. */
+          const int pm = (s_hero_pm * pm_y) / 1000;
+          int warped_top = cy + ((top - cy) * pm) / 1000;
+          int warped_h = ((GLYPH[p + 3] - 32) * pm) / 1000;
+          int warped_w = ((GLYPH[p + 2] - 32) * pm_x) / 1000;
           if (warped_h < 1) warped_h = 1;
+          if (warped_w < 1) warped_w = 1;
+          int warped_x = X_INSET + ((x + GLYPH[p] - 32 - X_INSET) * pm_x) / 1000;
           fill(ctx, (hole_mask & bit) ? GColorWhite : GColorBlack,
-               GRect(x + GLYPH[p] - 32, warped_top, GLYPH[p + 2] - 32, warped_h));
+               GRect(warped_x, warped_top, warped_w, warped_h));
         }
       }
     }
@@ -185,9 +191,18 @@ static void draw_hero_at(GContext *ctx, const char *text, int y0) {
 }
 
 void cards_draw(GContext *ctx, GRect bounds, int card) {
+  cards_draw_squash(ctx, bounds, card, 1000, 1000);
+}
+
+void cards_draw_squash(GContext *ctx, GRect bounds, int card, int pm_x, int pm_y) {
   const int w = bounds.size.w, h = bounds.size.h;
   const int bw = w - 2 * X_INSET;
   char hero[24], meta[128], tmp1[16], tmp2[16];
+  /* Layout compression: y positions below the cap are scaled about the card's
+   * centre, so a squash pulls the content toward the middle rather than sliding
+   * it toward one edge. */
+  const int pivot = h / 2;
+  #define SQ(y) (pivot + (((y) - pivot) * pm_y) / 1000)
 
   fill(ctx, GColorWhite, GRect(0, 0, w, h));
   fill(ctx, CAP[card], GRect(0, 0, w, CAP_H));
@@ -196,32 +211,32 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
   draw_pips(ctx, w, card);
 
   hero_str(hero, sizeof(hero), card);
-  draw_hero_at(ctx, hero, HERO_Y);
+  draw_hero_at_scaled(ctx, hero, SQ(HERO_Y), pm_x, pm_y);
 
-  text(ctx, stats_footer(), s_f_body, GColorDarkGray, X_INSET, CUE_Y, bw, 22);
+  text(ctx, stats_footer(), s_f_body, GColorDarkGray, X_INSET, SQ(CUE_Y), bw, 22);
 
   if (card == CARD_STEPS) {
-    text(ctx, "steps today", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
-    fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, bw, BAR_H));
+    text(ctx, "steps today", s_f_body, GColorDarkGray, X_INSET, SQ(UNIT_Y), bw, 22);
+    fill(ctx, GColorLightGray, GRect(X_INSET, SQ(BAR_Y), bw, (BAR_H * pm_y) / 1000));
     int pct = g_stats.steps > 0 ? (g_stats.steps * bw) / STEP_GOAL : 0;
     if (pct > bw) pct = bw;
-    if (pct > 0) fill(ctx, GColorJaegerGreen, GRect(X_INSET, BAR_Y, pct, BAR_H));
+    if (pct > 0) fill(ctx, GColorJaegerGreen, GRect(X_INSET, SQ(BAR_Y), pct, (BAR_H * pm_y) / 1000));
     if (g_stats.dist_m > 0) {
       f_tenths(tmp1, sizeof(tmp1), g_stats.dist_m / 100);
       snprintf(meta, sizeof(meta), "%s km \xc2\xb7 %d cal", tmp1, g_stats.calories);
     } else {
       snprintf(meta, sizeof(meta), "-");
     }
-    text(ctx, meta, s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
+    text(ctx, meta, s_f_body, GColorBlack, X_INSET, SQ(META_Y), bw, 22);
   } else if (card == CARD_SLEEP) {
     int v[4] = {g_stats.deep, g_stats.light, g_stats.rem, g_stats.awake};
-    text(ctx, "asleep", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
-    draw_parts(ctx, BAR_Y, w, v, STAGE);
+    text(ctx, "asleep", s_f_body, GColorDarkGray, X_INSET, SQ(UNIT_Y), bw, 22);
+    draw_parts(ctx, SQ(BAR_Y), w, v, STAGE);
     char t1[8], t2[8];
     stats_clock_to(t1, sizeof(t1), g_stats.sleep_start);
     stats_clock_to(t2, sizeof(t2), g_stats.sleep_end);
     snprintf(meta, sizeof(meta), "%s -> %s", t1, t2);
-    text(ctx, meta, s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
+    text(ctx, meta, s_f_body, GColorBlack, X_INSET, SQ(META_Y), bw, 22);
   } else if (card == CARD_HEART) {
     /* While the strap streams, the card says so: a filled pip in the cap plus the
      * live rate in the meta line. The hero stays resting bpm so the card keeps
@@ -230,15 +245,15 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
      * number "live bpm" was contradictory. The live rate belongs in the meta line,
      * where it cannot be mistaken for the hero's meaning. */
     const bool live = stats_live_fresh() && g_live.bpm > 0;
-    text(ctx, live ? "live bpm" : "resting bpm", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw,
+    text(ctx, live ? "live bpm" : "resting bpm", s_f_body, GColorDarkGray, X_INSET, SQ(UNIT_Y), bw,
          22);
-    fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, bw, BAR_H));
+    fill(ctx, GColorLightGray, GRect(X_INSET, SQ(BAR_Y), bw, (BAR_H * pm_y) / 1000));
     if (g_stats.hr_max > g_stats.hr_min && g_stats.resting_hr > 0) {
       int dot = X_INSET + ((g_stats.resting_hr - g_stats.hr_min) * bw) /
                                (g_stats.hr_max - g_stats.hr_min);
       if (dot < X_INSET) dot = X_INSET;
       if (dot > X_INSET + bw) dot = X_INSET + bw;
-      fill(ctx, GColorImperialPurple, GRect(dot - 7, BAR_Y - 3, 14, 14));
+      fill(ctx, GColorImperialPurple, GRect(dot - 7, SQ(BAR_Y) - 3, 14, (14 * pm_y) / 1000));
     }
     if (live) {
       f_dash(tmp1, sizeof(tmp1), g_stats.hr_min);
@@ -249,14 +264,14 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
       f_dash(tmp2, sizeof(tmp2), g_stats.hr_max);
       snprintf(meta, sizeof(meta), "min %s \xc2\xb7 max %s", tmp1, tmp2);
     }
-    text(ctx, meta, s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
+    text(ctx, meta, s_f_body, GColorBlack, X_INSET, SQ(META_Y), bw, 22);
   } else if (g_stats.has_workout && g_stats.wo_dur > 0) {
-    text(ctx, "duration", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
+    text(ctx, "duration", s_f_body, GColorDarkGray, X_INSET, SQ(UNIT_Y), bw, 22);
     if (g_stats.wo_lo + g_stats.wo_mid + g_stats.wo_hi > 0) {
       int v[4] = {g_stats.wo_lo, g_stats.wo_mid, g_stats.wo_hi, 0};
-      draw_parts(ctx, BAR_Y, w, v, ZONE);
+      draw_parts(ctx, SQ(BAR_Y), w, v, ZONE);
     } else {
-      fill(ctx, GColorOrange, GRect(X_INSET, BAR_Y, bw, BAR_H));
+      fill(ctx, GColorOrange, GRect(X_INSET, SQ(BAR_Y), bw, (BAR_H * pm_y) / 1000));
     }
     f_tenths(tmp1, sizeof(tmp1), g_stats.wo_dist / 100);
     f_dash(tmp2, sizeof(tmp2), g_stats.wo_avg);
@@ -267,11 +282,11 @@ void cards_draw(GContext *ctx, GRect bounds, int card) {
     } else {
       snprintf(meta, sizeof(meta), "- \xc2\xb7 %s avg \xc2\xb7 %s cal", tmp2, tmp3);
     }
-    text(ctx, meta, s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
+    text(ctx, meta, s_f_body, GColorBlack, X_INSET, SQ(META_Y), bw, 22);
   } else {
-    text(ctx, "today", s_f_body, GColorDarkGray, X_INSET, UNIT_Y, bw, 22);
-    fill(ctx, GColorLightGray, GRect(X_INSET, BAR_Y, bw, BAR_H));
-    text(ctx, "No workout", s_f_body, GColorBlack, X_INSET, META_Y, bw, 22);
+    text(ctx, "today", s_f_body, GColorDarkGray, X_INSET, SQ(UNIT_Y), bw, 22);
+    fill(ctx, GColorLightGray, GRect(X_INSET, SQ(BAR_Y), bw, (BAR_H * pm_y) / 1000));
+    text(ctx, "No workout", s_f_body, GColorBlack, X_INSET, SQ(META_Y), bw, 22);
   }
 }
 
@@ -327,4 +342,6 @@ void cards_warp_cancel(void) {
 }
 
 /* Same chunky digits at any y, so drill-down screens share the deck's typography. */
-void cards_hero_text(GContext *ctx, const char *text, int y) { draw_hero_at(ctx, text, y); }
+void cards_hero_text(GContext *ctx, const char *text, int y) {
+  draw_hero_at_scaled(ctx, text, y, 1000, 1000);
+}

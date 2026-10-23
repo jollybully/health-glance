@@ -5,7 +5,14 @@ Native **C** watch app for Health Glance — minimal 4-card deck on Pebble Time 
 **UI:** Steps · Sleep · Heart · Workouts. Big packed-glyph hero digits (the original Alloy fillRect font,
 ported to C) + Gothic Bold 24/18. Shared title/hero/unit slots.
 
-Four cards and nothing else: no drill-down screens, no charts, no day-by-day history. Select is
+Four cards and nothing else: no drill-down screens, no charts, no day-by-day history.
+
+**Motion.** Squash and stretch, volume preserved: a card that compresses vertically widens by the
+same ratio, so deformation reads as a rubber object rather than a zoom. The incoming card arrives
+compressed at the seam, stretches as it fills the screen, overshoots slightly and settles; the
+departing card compresses as it leaves; the launch slide lands with a squash. Dragging deforms the
+card under the finger, proportionally. The header stays pinned while the content compresses, which
+is what keeps it PebbleOS and not jelly. Select is
 inert on the deck, Up/Down page the cards, Back exits. The Heart card carries a pulsing frame that
 beats in lub-dub at the strap's measured rate and stops itself when samples go stale.
 

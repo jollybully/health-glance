@@ -14,6 +14,17 @@ void cards_init(void);
  * cap 36px, hero y=44, unit y=108, bar y=136 h=8, meta y=180, footer y=204. */
 void cards_draw(GContext *ctx, GRect bounds, int card);
 
+/* Per-card layer state. A card carries its own squash/stretch factors so the
+ * incoming and outgoing cards can deform in opposite directions during a page
+ * turn: 1000 is identity, so a settled card is pixel-identical to before. */
+typedef struct {
+  int card;
+  int pm_x; /* horizontal scale, per mille */
+  int pm_y; /* vertical scale, per mille */
+} CardLayer;
+
+void cards_draw_squash(GContext *ctx, GRect bounds, int card, int pm_x, int pm_y);
+
 /* PebbleOS-style warp: the card's layout and cap stretch then squash as it
  * arrives, so a page turn feels rubbery rather than rigid. `target` is redrawn
  * on every frame; at rest every warped coordinate is an identity. */

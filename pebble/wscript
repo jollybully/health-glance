@@ -46,6 +46,12 @@ def build(ctx):
         ctx.env.append_value('CFLAGS', ['-DHG_LAUNCH_HOLD={}'.format(os.environ.get('HG_LAUNCH_HOLD', '0'))])
         ctx.env.append_value('CFLAGS', ['-DHG_MARK={}'.format(mark)])
         ctx.env.append_value('CFLAGS', ['-DHG_CACHE_PROBE={}'.format(os.environ.get('HG_CACHE_PROBE', '0'))])
+        # HG_ANIM_MS slows the page turn so the deformation can be photographed
+        # frame by frame; the shipped default lives in anim.c.
+        ctx.env.append_value('CFLAGS', ['-DHG_SQUASH_PROBE={}'.format(os.environ.get('HG_SQUASH_PROBE', '0'))])
+        anim_ms = os.environ.get('HG_ANIM_MS', '')
+        if anim_ms:
+            ctx.env.append_value('CFLAGS', ['-DANIM_MS={}'.format(anim_ms)])
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
         ctx.pbl_build(source=ctx.path.ant_glob('src/c/**/*.c'), target=app_elf, bin_type='app')
 
