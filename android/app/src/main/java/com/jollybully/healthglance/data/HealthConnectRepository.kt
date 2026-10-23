@@ -66,11 +66,6 @@ class HealthConnectRepository(private val context: Context) {
         return granted.containsAll(HealthPermissions.coreReadPermissions)
     }
 
-    suspend fun hasWritePermissions(): Boolean {
-        val client = clientOrNull() ?: return false
-        val granted = client.permissionController.getGrantedPermissions()
-        return granted.containsAll(HealthPermissions.writePermissions)
-    }
 
     suspend fun loadStats(stepGoal: Int = 10_000): GlanceStats {
         val client = clientOrNull()
@@ -148,8 +143,6 @@ class HealthConnectRepository(private val context: Context) {
         val floors = loadFloors(client, dayStart, dayEnd, writer)
 
         val sleepWeek = sleepWeekFrom(sleepRecords, today)
-        val spo2 = loadSpo2(client, sleepLookback, dayEnd, writer)
-        val hrv = loadHrv(client, sleepLookback, dayEnd, writer)
         val workout = loadLastWorkout(client, sleepLookback, dayEnd, writer)
         val history = loadWorkoutHistory(client, sleepLookback, dayEnd, writer, today)
 
@@ -168,8 +161,6 @@ class HealthConnectRepository(private val context: Context) {
             ),
             sleep = sleep.copy(
                 sleepWeek = sleepWeek,
-                spo2Percent = spo2,
-                hrvMs = hrv,
             ),
             heart = HeartStats(
                 restingHr = restingHr,
@@ -183,242 +174,7 @@ class HealthConnectRepository(private val context: Context) {
         )
     }
 
-    /**
-     * Series for one past day, for the watch's day cycling: hourly steps and peak
-     * HR for that calendar day. Returns empty lists when there is no data, so the
-     * watch shows "no series" rather than an invented chart.
-     */
 
-
-    suspend fun seedSampleData() {
-        val client = clientOrNull()
-            ?: throw IllegalStateException("Health Connect unavailable")
-
-        val now = Instant.now()
-        val today = LocalDate.now(zone)
-        val dayStart = today.atStartOfDay(zone).toInstant()
-        val meta = Metadata.manualEntry()
-        val records = mutableListOf<androidx.health.connect.client.records.Record>()
-
-        // Multi-day steps (oldest → yesterday). Today comes from hourly buckets below.
-        val weekCounts = listOf(5500, 7200, 4000, 8800, 6500, 9500, 7611)
-        for (dayOffset in 0..5) {
-            val date = today.minusDays((6 - dayOffset).toLong())
-            val start = date.atStartOfDay(zone).toInstant().plus(8, ChronoUnit.HOURS)
-            val end = start.plus(6, ChronoUnit.HOURS)
-            records += StepsRecord(
-                startTime = start,
-                endTime = end,
-                startZoneOffset = zone.rules.getOffset(start),
-                endZoneOffset = zone.rules.getOffset(end),
-                count = weekCounts[dayOffset].toLong(),
-                metadata = meta,
-            )
-        }
-
-        // Hourly-ish samples today for histogram (overwrite-ish via separate windows)
-        val hourly = listOf(
-            0, 0, 0, 0, 0, 0, 80, 180, 320, 520, 780, 1240,
-            960, 680, 860, 600, 420, 500, 720, 380, 260, 120, 40, 0,
-        )
-        for (h in hourly.indices) {
-            val count = hourly[h]
-            if (count <= 0) continue
-            val start = dayStart.plus(h.toLong(), ChronoUnit.HOURS)
-            val end = start.plus(50, ChronoUnit.MINUTES)
-            if (end.isAfter(now)) continue
-            records += StepsRecord(
-                startTime = start,
-                endTime = end,
-                startZoneOffset = zone.rules.getOffset(start),
-                endZoneOffset = zone.rules.getOffset(end),
-                count = count.toLong(),
-                metadata = meta,
-            )
-        }
-
-        val midMorning = dayStart.plus(3, ChronoUnit.HOURS)
-        val afternoon = dayStart.plus(8, ChronoUnit.HOURS)
-        records += DistanceRecord(
-            startTime = midMorning,
-            endTime = afternoon,
-            startZoneOffset = zone.rules.getOffset(midMorning),
-            endZoneOffset = zone.rules.getOffset(afternoon),
-            distance = Length.kilometers(6.5),
-            metadata = meta,
-        )
-        records += TotalCaloriesBurnedRecord(
-            startTime = dayStart,
-            endTime = now,
-            startZoneOffset = zone.rules.getOffset(dayStart),
-            endZoneOffset = zone.rules.getOffset(now),
-            energy = Energy.kilocalories(2345.0),
-            metadata = meta,
-        )
-        records += ActiveCaloriesBurnedRecord(
-            startTime = midMorning,
-            endTime = afternoon,
-            startZoneOffset = zone.rules.getOffset(midMorning),
-            endZoneOffset = zone.rules.getOffset(afternoon),
-            energy = Energy.kilocalories(520.0),
-            metadata = meta,
-        )
-        records += FloorsClimbedRecord(
-            startTime = midMorning,
-            endTime = afternoon,
-            startZoneOffset = zone.rules.getOffset(midMorning),
-            endZoneOffset = zone.rules.getOffset(afternoon),
-            floors = 14.0,
-            metadata = meta,
-        )
-
-        // Broad HR range for today + resting samples
-        val hrSamples = mutableListOf(
-            HeartRateRecord.Sample(dayStart.plus(1, ChronoUnit.HOURS), 52),
-            HeartRateRecord.Sample(dayStart.plus(2, ChronoUnit.HOURS), 58),
-            HeartRateRecord.Sample(dayStart.plus(4, ChronoUnit.HOURS), 72),
-            HeartRateRecord.Sample(dayStart.plus(10, ChronoUnit.HOURS), 95),
-            HeartRateRecord.Sample(dayStart.plus(12, ChronoUnit.HOURS), 110),
-            HeartRateRecord.Sample(dayStart.plus(14, ChronoUnit.HOURS), 88),
-            HeartRateRecord.Sample(dayStart.plus(18, ChronoUnit.HOURS), 64),
-        )
-        val runStart = dayStart.plus(7, ChronoUnit.HOURS).plus(32, ChronoUnit.MINUTES)
-        val runEnd = runStart.plus(42, ChronoUnit.MINUTES).plus(18, ChronoUnit.SECONDS)
-        hrSamples += listOf(
-            HeartRateRecord.Sample(runStart.plus(5, ChronoUnit.MINUTES), 128),
-            HeartRateRecord.Sample(runStart.plus(15, ChronoUnit.MINUTES), 142),
-            HeartRateRecord.Sample(runStart.plus(25, ChronoUnit.MINUTES), 155),
-            HeartRateRecord.Sample(runStart.plus(35, ChronoUnit.MINUTES), 168),
-            HeartRateRecord.Sample(runStart.plus(40, ChronoUnit.MINUTES), 148),
-        )
-        records += HeartRateRecord(
-            startTime = dayStart.plus(1, ChronoUnit.HOURS),
-            endTime = dayStart.plus(18, ChronoUnit.HOURS),
-            startZoneOffset = zone.rules.getOffset(dayStart),
-            endZoneOffset = zone.rules.getOffset(dayStart.plus(18, ChronoUnit.HOURS)),
-            samples = hrSamples,
-            metadata = meta,
-        )
-
-        records += ExerciseSessionRecord(
-            startTime = runStart,
-            endTime = runEnd,
-            startZoneOffset = zone.rules.getOffset(runStart),
-            endZoneOffset = zone.rules.getOffset(runEnd),
-            exerciseType = ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
-            title = "Morning run",
-            metadata = meta,
-        )
-        records += ActiveCaloriesBurnedRecord(
-            startTime = runStart,
-            endTime = runEnd,
-            startZoneOffset = zone.rules.getOffset(runStart),
-            endZoneOffset = zone.rules.getOffset(runEnd),
-            energy = Energy.kilocalories(386.0),
-            metadata = meta,
-        )
-        records += DistanceRecord(
-            startTime = runStart,
-            endTime = runEnd,
-            startZoneOffset = zone.rules.getOffset(runStart),
-            endZoneOffset = zone.rules.getOffset(runEnd),
-            distance = Length.kilometers(5.2),
-            metadata = meta,
-        )
-
-        // 7 nights of sleep
-        val nightMins = listOf(420, 480, 360, 510, 450, 400, 435)
-        for (dayOffset in 0..6) {
-            val wakeDate = today.minusDays((6 - dayOffset).toLong())
-            val sleepEnd = wakeDate.atStartOfDay(zone).toInstant().plus(30, ChronoUnit.MINUTES)
-            val asleep = nightMins[dayOffset]
-            val sleepStart = sleepEnd.minus(asleep.toLong() + 18L, ChronoUnit.MINUTES)
-            val stages = if (dayOffset == 6) {
-                listOf(
-                    SleepSessionRecord.Stage(sleepStart, sleepStart.plus(18, ChronoUnit.MINUTES), SleepSessionRecord.STAGE_TYPE_AWAKE),
-                    SleepSessionRecord.Stage(sleepStart.plus(18, ChronoUnit.MINUTES), sleepStart.plus(90, ChronoUnit.MINUTES), SleepSessionRecord.STAGE_TYPE_LIGHT),
-                    SleepSessionRecord.Stage(sleepStart.plus(90, ChronoUnit.MINUTES), sleepStart.plus(162, ChronoUnit.MINUTES), SleepSessionRecord.STAGE_TYPE_DEEP),
-                    SleepSessionRecord.Stage(sleepStart.plus(162, ChronoUnit.MINUTES), sleepStart.plus(257, ChronoUnit.MINUTES), SleepSessionRecord.STAGE_TYPE_REM),
-                    SleepSessionRecord.Stage(sleepStart.plus(257, ChronoUnit.MINUTES), sleepEnd.minus(18, ChronoUnit.MINUTES), SleepSessionRecord.STAGE_TYPE_LIGHT),
-                    SleepSessionRecord.Stage(sleepEnd.minus(18, ChronoUnit.MINUTES), sleepEnd, SleepSessionRecord.STAGE_TYPE_AWAKE),
-                )
-            } else {
-                emptyList()
-            }
-            records += SleepSessionRecord(
-                startTime = sleepStart,
-                endTime = sleepEnd,
-                startZoneOffset = zone.rules.getOffset(sleepStart),
-                endZoneOffset = zone.rules.getOffset(sleepEnd),
-                stages = stages,
-                metadata = meta,
-            )
-        }
-
-        val vitalsAt = dayStart.plus(1, ChronoUnit.HOURS)
-        records += OxygenSaturationRecord(
-            time = vitalsAt,
-            zoneOffset = zone.rules.getOffset(vitalsAt),
-            percentage = Percentage(97.0),
-            metadata = meta,
-        )
-        records += HeartRateVariabilityRmssdRecord(
-            time = vitalsAt,
-            zoneOffset = zone.rules.getOffset(vitalsAt),
-            heartRateVariabilityMillis = 42.0,
-            metadata = meta,
-        )
-
-        client.insertRecords(records)
-    }
-
-    /**
-     * Delete every record this app itself wrote (the old "seed sample data"
-     * control). Health Connect only lets an app delete records it authored, which
-     * is exactly the scope we want: nothing of his real data is touched.
-     *
-     * Returns how many records were removed.
-     */
-    suspend fun deleteOwnRecords(): Int {
-        val client = clientOrNull() ?: return 0
-        val own = setOf(DataOrigin(packageName()))
-        val start = Instant.parse("2000-01-01T00:00:00Z")
-        val end = Instant.now().plusSeconds(86_400)
-        var removed = 0
-        suspend fun <T : androidx.health.connect.client.records.Record> purge(
-            type: kotlin.reflect.KClass<T>,
-        ) {
-            val ids = try {
-                client.readRecords(
-                    ReadRecordsRequest(
-                        recordType = type,
-                        timeRangeFilter = TimeRangeFilter.between(start, end),
-                        dataOriginFilter = own,
-                    ),
-                ).records.mapNotNull { it.metadata.id }
-            } catch (e: Exception) {
-                Log.w(TAG, "read own $type failed", e)
-                return
-            }
-            if (ids.isEmpty()) return
-            try {
-                client.deleteRecords(type, ids, emptyList())
-                removed += ids.size
-                Log.i(TAG, "deleted ${ids.size} own $type")
-            } catch (e: Exception) {
-                Log.w(TAG, "delete own $type failed", e)
-            }
-        }
-        purge(StepsRecord::class)
-        purge(DistanceRecord::class)
-        purge(TotalCaloriesBurnedRecord::class)
-        purge(ActiveCaloriesBurnedRecord::class)
-        purge(HeartRateRecord::class)
-        purge(SleepSessionRecord::class)
-        purge(ExerciseSessionRecord::class)
-        Log.i(TAG, "deleteOwnRecords removed=$removed")
-        return removed
-    }
 
     private fun packageName(): String = context.packageName
 

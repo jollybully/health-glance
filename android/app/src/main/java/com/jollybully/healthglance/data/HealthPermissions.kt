@@ -36,21 +36,8 @@ object HealthPermissions {
 
     val readPermissions: Set<String> = coreReadPermissions + optionalReadPermissions
 
-    val writePermissions: Set<String> = setOf(
-        HealthPermission.getWritePermission(StepsRecord::class),
-        HealthPermission.getWritePermission(DistanceRecord::class),
-        HealthPermission.getWritePermission(TotalCaloriesBurnedRecord::class),
-        HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
-        HealthPermission.getWritePermission(HeartRateRecord::class),
-        HealthPermission.getWritePermission(SleepSessionRecord::class),
-        HealthPermission.getWritePermission(ExerciseSessionRecord::class),
-        HealthPermission.getWritePermission(FloorsClimbedRecord::class),
-        HealthPermission.getWritePermission(OxygenSaturationRecord::class),
-        HealthPermission.getWritePermission(HeartRateVariabilityRmssdRecord::class),
-    )
 
     /** Permissions requested from the Grant button (debug adds writes for the seeder). */
-    fun requestSet(includeWrite: Boolean): Set<String> {
-        return if (includeWrite) readPermissions + writePermissions else readPermissions
-    }
+    /** Read-only: the companion never writes health records. */
+    fun requestSet(): Set<String> = readPermissions
 }

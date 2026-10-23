@@ -100,7 +100,6 @@ fun CompanionScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var availability by remember { mutableStateOf(repository.availability()) }
     var hasRead by remember { mutableStateOf(false) }
-    var hasWrite by remember { mutableStateOf(false) }
     var stats by remember { mutableStateOf<GlanceStats?>(sync.cachedStats()) }
     var status by remember { mutableStateOf(sync.cachedStatus()) }
     var busy by remember { mutableStateOf(false) }
@@ -143,7 +142,6 @@ fun CompanionScreen(
     ) {
         scope.launch {
             hasRead = repository.hasReadPermissions()
-            hasWrite = if (BuildConfig.DEBUG) repository.hasWritePermissions() else false
             status = if (hasRead) "Permissions granted" else SyncStatus.needPermissions()
             updateWorker(hasRead)
             if (hasRead) {
@@ -169,7 +167,6 @@ fun CompanionScreen(
     LaunchedEffect(Unit) {
         availability = repository.availability()
         hasRead = repository.hasReadPermissions()
-        hasWrite = if (BuildConfig.DEBUG) repository.hasWritePermissions() else false
         updateWorker(hasRead)
         if (hasRead) refreshNow()
         else if (stats == null) status = SyncStatus.fromAvailability(availability)
@@ -211,7 +208,6 @@ fun CompanionScreen(
             Text("Health Connect: ${availabilityLabel(availability)}", color = Ink)
             Text("Read perms: ${if (hasRead) "yes" else "no"}", color = Mute)
             if (BuildConfig.DEBUG) {
-                Text("Write perms (seeder): ${if (hasWrite) "yes" else "no"}", color = Mute)
             }
             Text("Status: $status", color = Ink)
             /* The charts are a separate push, so say plainly what was packed and
@@ -225,7 +221,7 @@ fun CompanionScreen(
 
             Button(
                 onClick = {
-                    permissionLauncher.launch(HealthPermissions.requestSet(includeWrite = BuildConfig.DEBUG))
+                    permissionLauncher.launch(HealthPermissions.requestSet())
                 },
                 enabled = availability is HealthConnectAvailability.Available && !busy,
                 modifier = Modifier.fillMaxWidth(),
@@ -241,38 +237,7 @@ fun CompanionScreen(
                 Text(if (busy) "Syncing…" else "Sync & push to watch")
             }
 
-            /* Debug-only: seeding demo data exists only in the debug source set,
-             * so the matching cleanup button has no business in a release build.
-             * Keeps the shipped app genuinely read-only. */
-            if (BuildConfig.DEBUG) OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        busy = true
-                        status = "Removing demo data…"
-                        try {
-                            val n = repository.deleteOwnRecords()
-                            status = if (n > 0) {
-                                "Removed $n demo records this app wrote"
-                            } else {
-                                "No demo data from this app was found"
-                            }
-                            refreshNow()
-                        } catch (e: Exception) {
-                            status = "Remove failed: ${e.message ?: e.javaClass.simpleName}"
-                            busy = false
-                        }
-                    }
-                },
-                enabled = availability is HealthConnectAvailability.Available && !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Remove demo data this app wrote")
-            }
 
-            /* The seed control is deliberately absent: it writes fabricated records
-             * into Health Connect with real timestamps, so a workout history would
-             * report sessions that never happened. seedSampleData() remains in the
-             * repository for tests only. */
 
             Box(modifier = Modifier.height(8.dp))
 
@@ -387,10 +352,13 @@ fun CompanionScreen(
                     Text("Clear crash log")
                 }
             }
-            val trail = remember { HealthGlanceApp.trail() }
-            if (trail.isNotBlank()) {
-                Text("Live HR trail", fontWeight = FontWeight.Bold, color = Mute)
-                Text(trail, style = MaterialTheme.typography.bodySmall, color = Mute)
+            if (BuildConfig.DEBUG) {
+                /* Developer breadcrumb from the last connect attempt. Not product UI. */
+                val trail = remember { HealthGlanceApp.trail() }
+                if (trail.isNotBlank()) {
+                    Text("Live HR trail", fontWeight = FontWeight.Bold, color = Mute)
+                    Text(trail, style = MaterialTheme.typography.bodySmall, color = Mute)
+                }
             }
 
             Box(modifier = Modifier.height(8.dp))

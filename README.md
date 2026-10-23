@@ -181,6 +181,9 @@ journey and the single button language the app follows.
 ## Privacy
 
 - Health data is read on the phone and pushed to the paired watch. That's the entire journey.
+- **Read-only, in every build.** The APK declares nine `READ_` Health Connect permissions and
+  zero `WRITE_` ones: steps, distance, calories, heart rate, resting heart rate, sleep, exercise,
+  and background read. Never written, never uploaded.
 - No backend, no analytics, no Google API client — Health Connect access is granted to the app
   directly by Android.
 - The shipped companion only reads. Demo seeding lives in the debug source set, and the matching
