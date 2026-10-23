@@ -89,8 +89,11 @@ static void push_done(void *ctx) {
   layer_mark_dirty(s_card[s_front]);
 }
 
-/* The launch slide: the deck rises from the bottom edge, which is what a quick
- * launch looks like when an app is pulled up over the watchface. */
+/* The launch slide: the deck comes down over the watchface, which is how PebbleOS
+ * presents an app panel. It used to rise from the bottom edge, i.e. backwards. */
+#ifndef HG_LAUNCH_MS
+#define HG_LAUNCH_MS 220
+#endif
 static Animation *s_launch;
 
 static void launch_stopped(Animation *a, bool finished, void *ctx) {
@@ -99,14 +102,21 @@ static void launch_stopped(Animation *a, bool finished, void *ctx) {
   (void)ctx;
   s_launch = NULL;
   layer_set_frame(s_card[0], GRect(0, 0, s_w, s_h));
+  APP_LOG(APP_LOG_LEVEL_INFO, "launch slide settled at y=%d", layer_get_frame(s_card[0]).origin.y);
 }
 
 static void launch_anim_start(void) {
-  layer_set_frame(s_card[0], GRect(0, s_h, s_w, s_h));
+  layer_set_frame(s_card[0], GRect(0, -s_h, s_w, s_h)); /* starts above the glass */
+  GRect f0 = layer_get_frame(s_card[0]);
+  APP_LOG(APP_LOG_LEVEL_INFO, "launch slide from y=%d to y=0 over %d ms", f0.origin.y,
+          HG_LAUNCH_MS);
+#if HG_LAUNCH_HOLD
+  return; /* probe build: hold the first frame for a screenshot */
+#endif
   GRect to = GRect(0, 0, s_w, s_h);
   PropertyAnimation *pa = property_animation_create_layer_frame(s_card[0], NULL, &to);
   s_launch = property_animation_get_animation(pa);
-  animation_set_duration(s_launch, 220);
+  animation_set_duration(s_launch, HG_LAUNCH_MS);
   animation_set_curve(s_launch, AnimationCurveEaseOut);
   animation_set_handlers(s_launch, (AnimationHandlers){.stopped = launch_stopped}, NULL);
   animation_schedule(s_launch);
