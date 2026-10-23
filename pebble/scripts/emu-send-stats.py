@@ -78,6 +78,35 @@ PAYLOAD = {
 # Mirror the companion exactly: the cards' scalars go first, then the detail
 # screens' series as their own message (so a byte-array problem cannot take the
 # cards down with it).
+def day_steps(day):
+    """Seven days of plausible step days, each with a different shape."""
+    base = [0, 0, 0, 0, 0, 0, 40, 120, 260, 410, 300, 520,
+            680, 540, 610, 430, 360, 480, 620, 300, 180, 90, 30, 0]
+    if day == 0:
+        vals = STEPS_HOURLY
+    elif day == 1:
+        vals = [v * 3 // 4 for v in base]           # quieter day
+    elif day == 2:
+        vals = [v * 5 // 4 for v in base]           # busier day
+    elif day == 3:
+        vals = [base[i] if i >= 12 else 0 for i in range(24)]  # late start
+    elif day == 4:
+        vals = [0] * 24                             # a day off: no bars at all
+    else:
+        vals = [v // 2 for v in base]
+    return bytes(min(255, v // 100) for v in vals)
+
+
+def day_hr(day):
+    shift = day * 4
+    return bytes(max(45, min(190, v - shift + (day % 2) * 6)) for v in HR_BYTES)
+
+
+def day_sleep(day):
+    rotate = day % 5
+    return bytes(SLEEP_BYTES[rotate:] + SLEEP_BYTES[:rotate])
+
+
 PAYLOAD.update({
     K["HR_LIVE"]: Uint32(132),
     K["HR_LIVE_TS"]: Uint32(int(time.time())),
@@ -150,12 +179,12 @@ def main():
             seen.append(data)
             print("watch -> phone:", dict(data), flush=True)
             if K["SERIES_DAY"] in data:
-                # mirror the companion: answer with that day's charts, scaled down
+                # mirror the companion: answer with that day's own charts
                 day = int(data[K["SERIES_DAY"]])
-                scale = max(1, day + 1)
-                steps = bytes(min(255, v // scale) for v in STEPS_BYTES)
-                hr = bytes(max(40, v - day * 3) for v in HR_BYTES)
-                sleep = bytes(s if day % 2 == 0 else (s + 1) % 4 for s in SLEEP_BYTES)
+                steps = day_steps(day)
+                hr = day_hr(day)
+                sleep = day_sleep(day)
+                print("day %d steps=%d hr=%d" % (day, sum(steps), max(hr)), flush=True)
                 service.send_message(target, {
                     K["SERIES_DAY"]: Uint32(day),
                     K["STEPS_SERIES"]: ByteArray(steps),

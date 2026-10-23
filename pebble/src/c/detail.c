@@ -256,7 +256,17 @@ static void draw_sleep(GContext *ctx) {
 static void draw_heart(GContext *ctx) {
   char a[32];
   const bool live = s_live && live_fresh();
-  frame(ctx, CARD_D_HEART, live ? "live" : (s_day == 0 ? "today" : "earlier"));
+  char ctxh[14];
+  if (live) {
+    snprintf(ctxh, sizeof ctxh, "live");
+  } else if (s_day == 0) {
+    snprintf(ctxh, sizeof ctxh, "today");
+  } else if (s_day == 1) {
+    snprintf(ctxh, sizeof ctxh, "yesterday");
+  } else {
+    snprintf(ctxh, sizeof ctxh, "%d days ago", s_day);
+  }
+  frame(ctx, CARD_D_HEART, ctxh);
 
   if (live) {
     /* the strap: hero is the current bpm, and the rail becomes a min/max gauge */
@@ -529,10 +539,13 @@ void detail_close(void) {
 bool detail_up(void) {
   if (s_card < 0) return false;
   /* Older day on the screens that show one day at a time. */
-  if (s_card == CARD_D_STEPS || s_card == CARD_D_SLEEP) {
+  if (s_card == CARD_D_STEPS || s_card == CARD_D_SLEEP || s_card == CARD_D_HEART) {
     if (s_day < 29 && s_request_day) {
       s_day++;
       s_waiting_day = s_day;
+      /* Asking for history means leaving the live view, otherwise the Heart
+       * screen keeps drawing the strap gauge and never shows a past day. */
+      if (s_card == CARD_D_HEART) s_live = false;
       clear_series_for(s_card); /* never show the old day's chart */
       layer_mark_dirty(s_layer);
       s_request_day(s_day);
@@ -544,21 +557,12 @@ bool detail_up(void) {
     layer_mark_dirty(s_layer);
     return true;
   }
-  if (s_card == CARD_D_HEART) {
-    if (live_fresh()) {
-      s_live = !s_live;
-    } else {
-      s_no_live_hint = true; /* draw_heart says "no live" rather than nothing */
-    }
-    layer_mark_dirty(s_layer);
-    return true;
-  }
   return true; /* consumed: the deck must not page while a detail is open */
 }
 
 bool detail_down(void) {
   if (s_card < 0) return false;
-  if (s_card == CARD_D_STEPS || s_card == CARD_D_SLEEP) {
+  if (s_card == CARD_D_STEPS || s_card == CARD_D_SLEEP || s_card == CARD_D_HEART) {
     if (s_day > 0 && s_request_day) {
       s_day--;
       s_waiting_day = s_day;
@@ -568,6 +572,7 @@ bool detail_down(void) {
       } else {
         clear_series_for(s_card);
       }
+      if (s_card == CARD_D_HEART && s_day > 0) s_live = false;
       layer_mark_dirty(s_layer);
       s_request_day(s_day);
     }
@@ -578,12 +583,19 @@ bool detail_down(void) {
     layer_mark_dirty(s_layer);
     return true;
   }
-  if (s_card == CARD_D_HEART) {
-    s_live = false;
-    layer_mark_dirty(s_layer);
-    return true;
-  }
   return true;
+}
+
+/* Select inside a detail: on Heart it switches between the strap and the graph.
+ * Day cycling owns Up/Down on every screen, so this is the only free button. */
+void detail_select(void) {
+  if (s_card != CARD_D_HEART) return;
+  if (live_fresh()) {
+    s_live = !s_live;
+  } else {
+    s_no_live_hint = true;
+  }
+  layer_mark_dirty(s_layer);
 }
 
 void detail_set_series(int card, const uint8_t *data, int len) {

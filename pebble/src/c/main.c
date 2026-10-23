@@ -298,7 +298,11 @@ static void down_click(ClickRecognizerRef r, void *ctx) {
 static void select_click(ClickRecognizerRef r, void *ctx) {
   (void)r;
   (void)ctx;
-  if (anim_busy() || detail_is_open()) return;
+  if (anim_busy()) return;
+  if (detail_is_open()) {
+    detail_select(); /* Heart: live <-> graph */
+    return;
+  }
   pulse_set_visible(false); /* the detail owns the display */
   detail_open(s_card_idx);
 }

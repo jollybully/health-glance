@@ -21,6 +21,8 @@ void detail_close(void);
 
 /* true when the press was consumed (so the deck must not act on it) */
 bool detail_up(void);
+/* Select inside an open detail (Heart: switch live/graph). */
+void detail_select(void);
 bool detail_down(void);
 
 void detail_redraw(void);
