@@ -204,8 +204,8 @@ static const uint8_t GLYPH[100] = {
      32,  32,  32,  32,
 };
 
-static void draw_hero_at(GContext *ctx, const char *text, int y0) {
-  int x = X_INSET;
+static void draw_hero_at_x(GContext *ctx, const char *text, int x0, int y0) {
+  int x = x0;
   const int cy = y0 + HERO_BLOCK_H / 2; /* warp pivot: the middle of the digits */
   for (int i = 0; text[i]; i++) {
     int ch = (unsigned char)text[i];
@@ -237,9 +237,167 @@ static void draw_hero_at(GContext *ctx, const char *text, int y0) {
   }
 }
 
+static void draw_hero_at(GContext *ctx, const char *text, int y0) {
+  draw_hero_at_x(ctx, text, X_INSET, y0);
+}
+
+
+/* ---------------- card content, shape-independent ---------------- */
+/* The strings are the card's meaning and are identical on both shapes; only the
+ * way they are laid out differs. Keeping one builder means a round screen can
+ * never quietly disagree with a rectangular one about what it is showing. */
+#include <stddef.h>
+#include <string.h>
+
+static void build_content(int card, char *hero, size_t hero_sz, const char **unit,
+                          char *meta, size_t meta_sz) {
+  char tmp1[16], tmp2[16], tmp3[16];
+  hero_str(hero, hero_sz, card);
+  if (card == CARD_STEPS) {
+    *unit = "steps today";
+    if (g_stats.dist_m > 0) {
+      f_tenths(tmp1, sizeof(tmp1), g_stats.dist_m / 100);
+      snprintf(meta, meta_sz, "%s km \xc2\xb7 %d cal", tmp1, g_stats.calories);
+    } else {
+      snprintf(meta, meta_sz, "-");
+    }
+  } else if (card == CARD_SLEEP) {
+    char t1[8], t2[8];
+    *unit = "asleep";
+    stats_clock_to(t1, sizeof(t1), g_stats.sleep_start);
+    stats_clock_to(t2, sizeof(t2), g_stats.sleep_end);
+    snprintf(meta, meta_sz, "%s -> %s", t1, t2);
+  } else if (card == CARD_HEART) {
+    const bool live = stats_live_fresh() && g_live.bpm > 0;
+    *unit = live ? "live bpm" : "resting bpm";
+    f_dash(tmp1, sizeof(tmp1), g_stats.hr_min);
+    f_dash(tmp2, sizeof(tmp2), g_stats.hr_max);
+    snprintf(meta, meta_sz, "min %s \xc2\xb7 max %s", tmp1, tmp2);
+  } else if (g_stats.has_workout && g_stats.wo_dur > 0) {
+    *unit = "duration";
+    f_tenths(tmp1, sizeof(tmp1), g_stats.wo_dist / 100);
+    f_dash(tmp2, sizeof(tmp2), g_stats.wo_avg);
+    f_dash(tmp3, sizeof(tmp3), g_stats.wo_cal);
+    if (g_stats.wo_dist > 0) {
+      snprintf(meta, meta_sz, "%s km \xc2\xb7 %s avg \xc2\xb7 %s cal", tmp1, tmp2, tmp3);
+    } else {
+      snprintf(meta, meta_sz, "- \xc2\xb7 %s avg \xc2\xb7 %s cal", tmp2, tmp3);
+    }
+  } else {
+    *unit = "today";
+    snprintf(meta, meta_sz, "No workout");
+  }
+}
+
+/* How full the card is, in thousandths. Drives the arc on a round screen. */
+static int card_fraction(int card) {
+  int f = 0;
+  if (card == CARD_STEPS) {
+    const int goal = g_stats.step_goal > 0 ? g_stats.step_goal : STEP_GOAL_DEFAULT;
+    f = (g_stats.steps * 1000) / goal;
+  } else if (card == CARD_SLEEP) {
+    f = (g_stats.sleep_min * 1000) / 480;      /* 8 h in bed is a full ring */
+  } else if (card == CARD_HEART) {
+    const int bpm = (stats_live_fresh() && g_live.bpm > 0) ? g_live.bpm : g_stats.resting_hr;
+    if (g_stats.hr_max > g_stats.hr_min) {
+      f = ((bpm - g_stats.hr_min) * 1000) / (g_stats.hr_max - g_stats.hr_min);
+    }
+  } else {
+    f = (g_stats.wo_dur * 1000) / 3600;        /* an hour of work is a full ring */
+  }
+  if (f < 0) f = 0;
+  if (f > 1000) f = 1000;
+  return f;
+}
+
+/* ---------------- round screen ---------------- */
+/* A round watch is not a rectangle with its corners cut off. The band becomes a
+ * ring at the glass, the bar becomes an arc of that ring, and the labels centre
+ * on the axis. The pulse frame lives outside this ring so a beat never eats the
+ * card's own colour. */
+static void round_ring(GContext *ctx, int w, int h, GColor c, int from, int to) {
+  const int inset = 8;
+  GRect outer = GRect(inset, inset, w - 2 * inset, h - 2 * inset);
+  graphics_context_set_fill_color(ctx, c);
+  graphics_fill_radial(ctx, outer, GOvalScaleModeFitCircle, 8, from, to);
+}
+
+static void round_arc(GContext *ctx, int w, int h, int frac1000, GColor c) {
+  if (frac1000 <= 0) return;
+  int end = (TRIG_MAX_ANGLE * frac1000) / 1000;
+  if (end <= 0) end = 1;
+  round_ring(ctx, w, h, c, 0, end);
+}
+
+static void round_label(GContext *ctx, const char *s, GFont f, GColor c, int y, int h) {
+  if (!s || !s[0]) return;
+  graphics_context_set_text_color(ctx, c);
+  graphics_draw_text(ctx, s, f, GRect(0, y, 260, h), GTextOverflowModeTrailingEllipsis,
+                     GTextAlignmentCenter, NULL);
+}
+
+static void round_draw(GContext *ctx, GRect b, int card) {
+  const int w = b.size.w, h = b.size.h;
+  const int cx = w / 2;
+  char hero[24], meta[128];
+  const char *unit = "";
+  build_content(card, hero, sizeof(hero), &unit, meta, sizeof(meta));
+
+  fill(ctx, GColorWhite, GRect(0, 0, w, h));
+  round_ring(ctx, w, h, GColorLightGray, 0, TRIG_MAX_ANGLE);   /* track */
+
+  if (card == CARD_SLEEP) {
+    int v[4] = {g_stats.deep, g_stats.light, g_stats.rem, g_stats.awake};
+    int total = v[0] + v[1] + v[2] + v[3];
+    if (total > 0) {
+      int acc = 0;
+      for (int i = 0; i < 4; i++) {
+        if (v[i] <= 0) continue;
+        int span = (TRIG_MAX_ANGLE * v[i]) / total;
+        round_ring(ctx, w, h, STAGE[i], acc, acc + span);
+        acc += span;
+      }
+    }
+  } else if (card == CARD_WORKOUT && g_stats.wo_lo + g_stats.wo_mid + g_stats.wo_hi > 0) {
+    int v[3] = {g_stats.wo_lo, g_stats.wo_mid, g_stats.wo_hi};
+    int total = v[0] + v[1] + v[2];
+    int acc = 0;
+    for (int i = 0; i < 3; i++) {
+      if (v[i] <= 0) continue;
+      int span = (TRIG_MAX_ANGLE * v[i]) / total;
+      round_ring(ctx, w, h, ZONE[i], acc, acc + span);
+      acc += span;
+    }
+  } else {
+    round_arc(ctx, w, h, card_fraction(card), CAP[card]);
+  }
+
+  /* A hairline inside the ring separates it from the type without a box. */
+  graphics_context_set_stroke_color(ctx, GColorLightGray);
+  graphics_draw_circle(ctx, GPoint(cx, h / 2), (w / 2) - 20);
+
+  /* Title in the card's own colour, centred at the top: on a circle the colour
+   * identification has to come from the ring and the word, not from a band. */
+  round_label(ctx, card_title(card), s_f_title, CAP[card], 34, 30);
+
+  const int n = (int)strlen(hero);
+  draw_hero_at_x(ctx, hero, cx - (n * 36) / 2, 92);
+
+  round_label(ctx, unit, s_f_body, GColorDarkGray, 148, 22);
+  round_label(ctx, meta, s_f_body, GColorBlack, 176, 22);
+  /* No position pips here: on a rectangle they sit in the cap, but on a circle the
+   * only place left is the footer's row, where four squares landed on top of
+   * "synced 09:41". The ring colour and the title already say which card this is. */
+  round_label(ctx, stats_footer(), s_f_body, GColorDarkGray, 204, 22);
+}
+
 void cards_draw(GContext *ctx, GRect bounds, int card) {
   const int w = bounds.size.w, h = bounds.size.h;
   layout_for(bounds);
+#if PBL_ROUND
+  round_draw(ctx, bounds, card);
+  return;
+#endif
   const int bw = w - 2 * X_INSET;
   char hero[24], meta[128], tmp1[16], tmp2[16];
 
