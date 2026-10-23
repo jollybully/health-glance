@@ -190,15 +190,17 @@ static void draw_parts(GContext *ctx, int y, int w, const int v[4], const GColor
 
 
 /* The original hero: 13 strokes (x,y,w,h +32), then 12 fill masks and 12 hole
- * masks, 7 bits per byte — the packed-glyph table from the Alloy app, ported
- * verbatim so the big blocky digits are identical. Digits advance 36 px. */
+ * masks, 7 bits per byte — hand-built for the C port (the Alloy build used a
+ * system font, so there was nothing to port verbatim). Digits advance 36 px.
+ * Digit 6's fill mask was a copy of 5's, missing the lower-left stroke, so every
+ * 6 drew as a 5 and a live 69 bpm read "59". */
 static const uint8_t GLYPH[100] = {
      34,  34,  62,  42,  34,  54,  62,  42,  34,  74,  62,  42,
      34,  34,  42,  62,  34,  54,  42,  62,  54,  34,  42,  62,
      54,  54,  42,  62,  54,  34,  42,  82,  44,  34,  42,  82,
      34,  34,  62,  82,  44,  44,  42,  62,  44,  44,  42,  42,
      44,  64,  42,  42,  32,  36,  32,  34,  87,  32,  39,  33,
-     42,  33, 111,  32, 111,  32,  33,  33,  32,  36,  47,  33,
+     42,  33, 111,  32, 127,  32,  33,  33,  32,  36,  47,  33,
      32,  80,  34,  32,  32,  40,  32,  32,  32,  32,  32,  32,
      32,  32,  32,  32,  32,  64,  32,  32,  32,  80,  32,  48,
      32,  32,  32,  32,

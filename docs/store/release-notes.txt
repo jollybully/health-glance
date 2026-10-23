@@ -1,11 +1,4 @@
-Health Glance now runs on the Pebble Round 2.
+The big numbers now draw every digit as itself.
 
-- Round 2 (Gabbro) is a supported platform, and it gets its own layout rather than a rectangular
-  card squeezed into a circle: the card's colour becomes a ring at the glass, the value bar becomes
-  an arc of that ring, sleep stages and workout zones become arcs of it too, and the labels centre
-  on the axis. Down from Steps still goes home, and Up on Workouts still springs.
-- The live heart-rate pulse now follows the shape of the screen: a ring on Round 2, a frame on the
-  Time 2.
-- Nothing changes on the Pebble Time 2. The rectangular cards are pixel-identical to 1.0.1.
-
-The Android companion is unchanged: there is nothing new to sideload if you are already on 1.0.1.
+- Fixed the digit 6. It was being drawn with the 5 shape, so a live 69 bpm showed as 59, and any 6 in a steps count or a sleep time was wrong the same way. Only numbers containing a 6 were affected; 70 and up were always fine, which is why it looked like the heart rate reading low below 70.
+- Nothing else changed on the watch. The Android companion is unchanged, so there is nothing new to sideload if you are already set up.
