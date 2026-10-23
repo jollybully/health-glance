@@ -1,10 +1,11 @@
-The step goal is now yours to set in the companion app, and the ends of the deck answer back.
+Health Glance now runs on the Pebble Round 2.
 
-- Daily step goal is a setting: a number field in the companion, clamped 500-100,000, pushed to
-  the watch on save and cached there.
-- Down on Steps goes home, the way a quick-launched app should be left.
-- Pressing Up on Workouts, or dragging past either end, leans the card and settles it instead of
-  going dead.
+- Round 2 (Gabbro) is a supported platform, and it gets its own layout rather than a rectangular
+  card squeezed into a circle: the card's colour becomes a ring at the glass, the value bar becomes
+  an arc of that ring, sleep stages and workout zones become arcs of it too, and the labels centre
+  on the axis. Down from Steps still goes home, and Up on Workouts still springs.
+- The live heart-rate pulse now follows the shape of the screen: a ring on Round 2, a frame on the
+  Time 2.
+- Nothing changes on the Pebble Time 2. The rectangular cards are pixel-identical to 1.0.1.
 
-Upgrading from 1.0.0: install both halves. The watch cache moved to v2 to hold the goal, so the
-first launch shows "no data" until the companion pushes once.
+The Android companion is unchanged: there is nothing new to sideload if you are already on 1.0.1.
