@@ -2,13 +2,18 @@
 
 Native **C** watch app for Health Glance — minimal 4-card deck on Pebble Time 2 (Emery).
 
-**UI:** Steps · Sleep · Heart · Workout. Big packed-glyph hero digits (the original Alloy fillRect font, ported to C) + Gothic Bold 24/18. Shared title/hero/unit slots (no side breadcrumbs).
+**UI:** Steps · Sleep · Heart · Workouts. Big packed-glyph hero digits (the original Alloy fillRect font,
+ported to C) + Gothic Bold 24/18. Shared title/hero/unit slots.
+
+Four cards and nothing else: no drill-down screens, no charts, no day-by-day history. Select is
+inert on the deck, Up/Down page the cards, Back exits. The Heart card carries a pulsing frame that
+beats in lub-dub at the strap's measured rate and stops itself when samples go stale.
 
 Stats come from the Android companion (`../android`) via PebbleKit AppMessages. There is no PKJS.
 
 On open, the watch paints the **last known stats from flash** (so the deck is never empty out of phone range), then asks for a fresh push and replaces them. Phone WorkManager keeps the companion cache warm; there is no watch-side background worker.
 
-This replaced the Alloy/JS build (`src/embeddedjs/*`, Poco, pebbleproxy): XS + Poco shared Emery's 128 KB with the framebuffer, so two-card blits OOM'd. The C build uses 6.7 KB of the 128 KB budget with 124 KB of heap free.
+This replaced the Alloy/JS build (`src/embeddedjs/*`, Poco, pebbleproxy): XS + Poco shared Emery's 128 KB with the framebuffer, so two-card blits OOM'd. The C build uses 12 KB of code and under 1 KB of static RAM.
 
 ## Building & running
 

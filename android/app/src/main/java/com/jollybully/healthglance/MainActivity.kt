@@ -241,10 +241,10 @@ fun CompanionScreen(
                 Text(if (busy) "Syncing…" else "Sync & push to watch")
             }
 
-                        /* Only deletes records THIS app authored, so his real health data is
-             * never touched. Added because the old seed control put fabricated
-             * workouts into Health Connect and they kept showing as real. */
-            OutlinedButton(
+            /* Debug-only: seeding demo data exists only in the debug source set,
+             * so the matching cleanup button has no business in a release build.
+             * Keeps the shipped app genuinely read-only. */
+            if (BuildConfig.DEBUG) OutlinedButton(
                 onClick = {
                     scope.launch {
                         busy = true

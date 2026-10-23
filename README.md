@@ -1,107 +1,197 @@
 # Health Glance
 
-Health data from **Health Connect** → Android companion → **Pebble Time 2** (Emery).
+**Your Health Connect data, on your wrist, at a glance.**
 
-Any Health Connect writer works (Fitbit, Samsung Health, Google Fit, etc.). The companion reads on-device and pushes stats to the watch over PebbleKit 2.
+A native C watch app for the **Pebble Time 2 (Emery)** and a small Android companion that reads
+**Health Connect** on-device and pushes four numbers to the watch. No account, no cloud, no
+Google Fit API keys — just the health data your phone already holds.
+
+<img src="docs/images/hero.png" alt="Health Glance: four cards on a Pebble Time 2" width="100%">
+
+---
+
+## What it is
+
+Four cards. That's the whole app.
+
+| Card | Big number | Underneath | Bar |
+| --- | --- | --- | --- |
+| **Steps** | steps today | distance and calories | progress toward your goal |
+| **Sleep** | time asleep | the night's start and end, REM | the night's stages |
+| **Heart** | resting bpm — or live bpm from a chest strap | the day's min and max | where you sit in that range |
+| **Workouts** | the last session's duration | distance, average hr, calories | time in each heart-rate zone |
 
 <p>
-<img src="docs/images/watch-steps.png" alt="Steps card" width="160">
-<img src="docs/images/watch-sleep.png" alt="Sleep card" width="160">
-<img src="docs/images/watch-heart.png" alt="Heart card" width="160">
-<img src="docs/images/watch-workout.png" alt="Workout card" width="160">
+<img src="docs/images/cards-strip.png" alt="The four cards: Steps, Sleep, Heart, Workouts" width="100%">
 </p>
 
-## Downloads
+Deliberately absent: charts to scroll, days to page back through, settings to configure. Health
+*glance* means a number you can read mid-stride.
 
-Latest release assets:
+## Highlights
 
-- [health-glance.pbw](https://github.com/jollybully/health-glance/releases/latest/download/health-glance.pbw) — watch app (Emery)
-- [health-glance-debug.apk](https://github.com/jollybully/health-glance/releases/latest/download/health-glance-debug.apk) — Android companion (sideload / debug)
+- **Native C**, not Alloy — 12 KB of code and under 1 KB of static RAM, so it launches instantly
+  with no JavaScript runtime spinning up under the deck.
+- **Pebble-native motion.** The deck drops down over the watchface on launch, cards push with a
+  seam, and the hero numbers warp as they change. Nothing bounces, nothing overshoots.
+- **Live heart rate from a standard BLE strap.** The phone is the BLE central and republishes
+  over PebbleKit; the watch shows your actual beat within ~2 seconds.
+- **A pulse frame on the Heart card only**, beating in lub-dub at your measured rate. It stops on
+  its own when samples go stale, so it can never pretend a dead strap is live.
+- **Works offline.** Every card is cached to flash, so a cold start paints your last numbers with
+  a `cached HH:MM` footer before the phone is even awake.
+- **Read-only.** The companion never writes health data. Your stats stay between your phone and
+  your watch.
 
-> If those links 404, open [Releases](https://github.com/jollybully/health-glance/releases) and grab the newest build.
+<p>
+<img src="docs/images/pulse.gif" alt="Live heart rate with the pulse frame" width="200">
+</p>
 
-The debug APK is unsigned and intended for sideload, not Play Store.
+<sub>The pulse frame, captured from the watch at 30 bpm so the beat is visible as a still image.</sub>
+
+## Requirements
+
+- **Pebble Time 2** running Core, with the app installed ([`coredevices.coreapp`](https://github.com/coredevices) ≥ 1.0.7.7)
+- **Android 8+** (`minSdk` 26), with **Health Connect**: built into Android 14+, installed as an
+  app on 13 and below. Health Connect is the only data source.
+- Anything that writes to Health Connect: Fitbit, Samsung Health, Google Fit, a Garmin bridge…
+- *Optional, for live heart rate:* a BLE chest strap or watch that advertises the standard
+  Heart Rate Service (`0x180D`) and **broadcast** enabled — Fitbit calls it *Broadcast Heart Rate*
+  or *Heart Rate on Equipment*
 
 ## Install
 
-1. Install **Core** on your phone and pair your Pebble Time 2 (`coredevices.coreapp` ≥ 1.0.7.7).
-2. Sideload `health-glance-debug.apk` (package `com.jollybully.healthglance`; enable install from unknown sources if prompted).
-3. Open **Health Glance** → grant Health Connect **read** permissions (and background read).
-4. Ensure your fitness app is sharing the metrics you care about into Health Connect.
-5. Install `health-glance.pbw` on the watch (Core developer sideload, or `pebble install --phone <PHONE_IP>` if you have the Pebble toolchain).
-6. Allow the companion when Core prompts. Open the watch app — it paints last-known stats immediately, then requests a fresh push.
+### 1. The watch app
 
-## Replace Pebble Health (UP Quick Launch)
+Grab `health-glance-c.pbw` from [Releases](../../releases) and install it with Core's developer
+sideload, or:
 
-Stock Pebble Health is a separate app. Health Glance does not hijack its UUID — assign this app to **Up** instead:
-
-1. On the watch: **Settings → Quick Launch → Up → Health Glance** (wording may vary slightly in Core).
-2. Optionally ignore or hide stock **Pebble Health** so Up no longer opens it.
-3. From the watchface, press **Up** → Health Glance opens on **Steps**. Keep pressing **Up** through Sleep → Heart → Workout. **Down on Steps** exits back to the watchface.
-
-| Button | On Steps | On other cards |
-|--------|----------|----------------|
-| Up | → Sleep | Next card (stops on Workout) |
-| Down | Exit → watchface | Previous card |
-| Back | Exit | Exit |
-
-Deck: Steps → Sleep → Heart → Workout.
-
-## Repo layout
-
-```
-android/   Kotlin companion (Health Connect + PebbleKit Android 2)
-pebble/    Native C watch app (Steps / Sleep / Heart / Workout)
-docs/      README screenshots (fixture numbers, not live health data)
+```bash
+pebble install --phone <PHONE_IP>
 ```
 
-## Build from source (optional)
+### 2. The companion
 
-### Android
+Sideload `health-glance-companion.apk` (package `com.jollybully.healthglance`; enable "install
+unknown sources" when prompted). Then open **Health Glance**:
 
-- Android Studio / SDK 36
-- JDK via Studio JBR (or set `JAVA_HOME`)
+1. **Grant Health Connect permissions** — read-only access to steps, sleep, heart rate, exercise.
+2. **Sync & push to watch** — the first push. After that it refreshes every 30 minutes, and the
+   watch asks for fresh numbers whenever you open it.
+
+### 3. Make it your quick launch
+
+Stock Pebble Health has its own UUID; Health Glance doesn't hijack it.
+
+On the watch: **Settings → Quick Launch → Up → Health Glance.** Then, from the watchface, hold
+**Up** and the deck drops down over the dial.
+
+## Controls
+
+Three buttons, one grammar: Up and Down move through a list, Select acts on what is shown, Back
+leaves.
+
+| Where | Up | Down | Select | Back |
+| --- | --- | --- | --- | --- |
+| Deck | next card | previous card | — | exit to watchface |
+
+That's genuinely all of it. Back is the only way out, so you can never leave the app by accident
+while reading a number.
+
+## Live heart rate (optional)
+
+Tap **Connect heart-rate strap** in the companion and leave it running as a foreground service.
+It scans for `0x180D`, connects, smooths the reading (median of three), and publishes every 2
+seconds or on a 2 bpm change.
+
+On the watch, the Heart card's hero becomes your live bpm, and once live data is arriving the
+screen edge beats with it.
+
+Two honest caveats:
+
+- **The phone must be doing the reading.** PebbleOS implements GATT services as a *server* only —
+  there is no app-level GATT client on the watch, so a strap cannot talk to it directly
+  ([PebbleOS#853](https://github.com/coredevices/PebbleOS/issues/853)).
+- **A strap that isn't broadcasting is invisible.** If no device advertises `0x180D`, the app
+  says `No strap found (no heart-rate service advertised)` and keeps retrying, rather than
+  silently presenting old numbers as live.
+
+## How it works
+
+```
+ Health Connect  ──►  Android companion  ──►  PebbleKit  ──►  watch (native C)
+ (on-device)          reads, caches            AppMessage       4 cards + flash cache
+                              │
+                     BLE central (optional)
+                              ▼
+                      chest strap, 0x180D
+```
+
+- The watch paints its flash cache instantly, then sends `STATS_REQ`.
+- The companion answers with one flat AppMessage of scalars (47 message keys, append-only).
+- Live heart rate travels on its own keys and is **never cached** — a stale "live" value is worse
+  than none, so freshness is enforced at 20 seconds on the watch.
+- All charts, day-by-day history and drill-down screens were deliberately removed; the app is the
+  deck.
+
+## Build from source
+
+### Watch (native C)
+
+Requires [Pebble Tool](https://developer.repebble.com) with SDK 4.17 (Emery).
+
+```bash
+cd pebble
+pebble build                        # live build
+pebble install --emulator emery     # run it in the emulator
+```
+
+Build flags: `HG_DEMO=1` seeds fixture numbers for emulator QA, `HG_LAUNCH_HOLD=1` freezes the
+launch slide at frame zero, `HG_LAUNCH_MS=<n>` overrides its duration.
+
+### Android companion
 
 ```bash
 source android/scripts/env.sh
 cd android
-./gradlew :app:assembleDebug    # or :app:installDebug
+./gradlew :app:testDebugUnitTest :app:assembleDebug
 ```
 
-Debug builds include a Health Connect seeder for emulator QA. Release builds are read-only and omit the seeder.
+### Emulator QA
 
-### Watch
+`pebble/scripts/` holds the harness used while building this: `emu-shot.sh` (QEMU screendump, since
+`pebble screenshot` is unreliable on this SDK), `emu-send-stats.py` (a stand-in companion that
+answers `STATS_REQ` and can stream fake live samples with `EMU_BPM`), `emu-launch-app.py`, and
+`emu-capture-deck.sh`.
 
-Requires [Pebble Tool](https://developer.repebble.com) + SDK 4.17 (Emery). Native C — no Alloy/Moddable runtime.
+## Repo layout
 
-```bash
-cd pebble
-pebble build                             # live build
-HG_DEMO=1 pebble build                   # fixture numbers for emulator QA
-pebble install --emulator emery
-pebble install --phone <PHONE_IP>        # live companion path
+```
+android/   Kotlin companion: Health Connect reads, BLE strap reader, PebbleKit push
+pebble/    Native C watch app: four cards, pulse frame, flash cache
+docs/      Screenshots, the UX review, design mockups
 ```
 
-See `pebble/README.md`.
+Design notes worth reading: [`docs/ux-review.md`](docs/ux-review.md) — the screen-by-screen
+journey and the single button language the app follows.
 
-## Sync behaviour
+## Privacy
 
-- Watch paints last-known stats on open, then requests a fresh push (`STATS_REQ`)
-- Manual **Sync & push to watch** in the companion
-- Periodic WorkManager refresh every **30 minutes** (phone-side cache; AppMessage delivery still needs Core + open watch app)
+- Health data is read on the phone and pushed to the paired watch. That's the entire journey.
+- No backend, no analytics, no Google API client — Health Connect access is granted to the app
+  directly by Android.
+- The shipped companion only reads. Demo seeding lives in the debug source set, and the matching
+  cleanup button is compiled out of release builds, so a release APK has no write path at all.
 
-## Stats contract (companion → watch)
+## Known limitations
 
-Flat AppMessage keys (see `pebble/package.json` `messageKeys`). Live UI uses root scalars + workout:
-
-- Warm push: Steps / Sleep / Heart (`toRootDictionary`)
-- Full push: same + workout keys (`WO_DUR_S`, `WO_CAL`, `WO_AVG_HR`, `WO_DIST_M`, `WO_START`, `WO_END`, `WO_TITLE`)
-
-## Security
-
-- Health data stays on-device; companion reads Health Connect and pushes to the paired watch only
-- No Google refresh token in the companion path
-- Play Store Health declarations required before a public listing (out of scope for sideload builds)
+- **Android only.** Health Connect is an Android platform API; there is no iOS companion.
+- **Sideload builds.** The APK is unsigned and debug-signed for convenience. A Play Store listing
+  would need Health Connect declarations and a signed release.
+- **Workouts show the most recent session**, not a list — paging through older sessions went with
+  the rest of the drill-down layer.
+- **30-minute background refresh.** Faster than that needs the watch to ask (it does, on open) or
+  a manual push from the companion.
 
 ## License
 
