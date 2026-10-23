@@ -586,25 +586,26 @@ void detail_close(void) {
 
 bool detail_up(void) {
   if (s_card < 0) return false;
-  /* Older day on the screens that show one day at a time. */
-  if (s_card == CARD_D_STEPS || s_card == CARD_D_SLEEP || s_card == CARD_D_HEART) {
-    if (s_day < 29 && s_request_day) {
-      s_day++;
-      s_waiting_day = s_day;
-      s_day_totals_ok = false;
-      memset(s_day_totals, 0, sizeof(s_day_totals));
-      /* Asking for history means leaving the live view, otherwise the Heart
-       * screen keeps drawing the strap gauge and never shows a past day. */
-      if (s_card == CARD_D_HEART) s_live = false;
-      clear_series_for(s_card); /* never show the old day's chart */
-      layer_mark_dirty(s_layer);
-      s_request_day(s_day);
-    }
-    return true;
-  }
   if (s_card == CARD_D_WORKOUTS && wo_count() > 1) {
     s_cursor = (s_cursor - 1 + wo_count()) % wo_count();
     layer_mark_dirty(s_layer);
+    return true;
+  }
+  if (s_card == CARD_D_STEPS || s_card == CARD_D_SLEEP || s_card == CARD_D_HEART) {
+    if (s_day > 0 && s_request_day) {
+      s_day--;
+      s_day_totals_ok = false;
+      memset(s_day_totals, 0, sizeof(s_day_totals));
+      if (s_day == 0) {
+        s_waiting_day = -1; /* today's charts are already on the watch */
+      } else {
+        s_waiting_day = s_day;
+        clear_series_for(s_card);
+      }
+      if (s_card == CARD_D_HEART && s_day == 0) s_live = live_fresh();
+      layer_mark_dirty(s_layer);
+      s_request_day(s_day);
+    }
     return true;
   }
   return true; /* consumed: the deck must not page while a detail is open */
@@ -612,27 +613,23 @@ bool detail_up(void) {
 
 bool detail_down(void) {
   if (s_card < 0) return false;
-  if (s_card == CARD_D_STEPS || s_card == CARD_D_SLEEP || s_card == CARD_D_HEART) {
-    if (s_day > 0 && s_request_day) {
-      s_day--;
-      s_waiting_day = s_day;
-      s_day_totals_ok = false;
-      memset(s_day_totals, 0, sizeof(s_day_totals));
-      if (s_day == 0) {
-        /* today's charts we already hold stay valid */
-        s_waiting_day = -1;
-      } else {
-        clear_series_for(s_card);
-      }
-      if (s_card == CARD_D_HEART && s_day > 0) s_live = false;
-      layer_mark_dirty(s_layer);
-      s_request_day(s_day);
-    }
-    return true;
-  }
   if (s_card == CARD_D_WORKOUTS && wo_count() > 1) {
     s_cursor = (s_cursor + 1) % wo_count();
     layer_mark_dirty(s_layer);
+    return true;
+  }
+  if (s_card == CARD_D_STEPS || s_card == CARD_D_SLEEP || s_card == CARD_D_HEART) {
+    if (s_day < 29 && s_request_day) {
+      s_day++;
+      s_day_totals_ok = false;
+      memset(s_day_totals, 0, sizeof(s_day_totals));
+      s_waiting_day = s_day;
+      /* asking for history means leaving the live view */
+      if (s_card == CARD_D_HEART) s_live = false;
+      clear_series_for(s_card);
+      layer_mark_dirty(s_layer);
+      s_request_day(s_day);
+    }
     return true;
   }
   return true;
