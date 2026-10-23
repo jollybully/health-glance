@@ -368,6 +368,32 @@ static const int REQ_DELAYS_MS[] = {400, 800, 1500, 3000, 6000, 12000};
 
 static void req_timer(void *data);
 
+/* A day request that the phone never answers would leave that screen empty
+ * forever, so it is retried a couple of times before giving up. */
+static AppTimer *s_day_timer;
+static int s_day_tries;
+
+static void day_retry(void *data);
+static void request_day(int day);
+
+static void schedule_day_retry(void) {
+  if (s_day_timer) app_timer_cancel(s_day_timer);
+  s_day_timer = app_timer_register(4000, day_retry, NULL);
+}
+
+static void day_retry(void *data) {
+  (void)data;
+  s_day_timer = NULL;
+  if (!detail_is_open() || !detail_day_pending()) return;
+  if (s_day_tries >= 2) {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "day %d never answered", detail_day());
+    return;
+  }
+  s_day_tries++;
+  APP_LOG(APP_LOG_LEVEL_INFO, "day retry %d for %d", s_day_tries, detail_day());
+  request_day(detail_day());
+}
+
 /* Ask the phone for one past day's charts (detail screens cycle with Up/Down). */
 static void request_day(int day) {
 #if HG_DEMO
@@ -382,6 +408,8 @@ static void request_day(int day) {
   dict_write_int32(it, MESSAGE_KEY_SERIES_DAY, day);
   r = app_message_outbox_send();
   APP_LOG(APP_LOG_LEVEL_INFO, "SERIES_DAY %d -> %d", day, (int)r);
+  s_day_tries = 0;
+  schedule_day_retry();
 #endif
 }
 

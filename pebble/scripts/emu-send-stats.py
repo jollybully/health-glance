@@ -155,10 +155,12 @@ def main():
                 scale = max(1, day + 1)
                 steps = bytes(min(255, v // scale) for v in STEPS_BYTES)
                 hr = bytes(max(40, v - day * 3) for v in HR_BYTES)
+                sleep = bytes(s if day % 2 == 0 else (s + 1) % 4 for s in SLEEP_BYTES)
                 service.send_message(target, {
                     K["SERIES_DAY"]: Uint32(day),
                     K["STEPS_SERIES"]: ByteArray(steps),
                     K["HR_SERIES"]: ByteArray(hr),
+                    K["SLEEP_SERIES"]: ByteArray(sleep),
                 })
                 print("answered SERIES_DAY %d" % day, flush=True)
             if K["STATS_REQ"] in data:

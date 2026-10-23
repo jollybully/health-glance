@@ -36,10 +36,17 @@ class HealthGlancePebbleService : BasePebbleListenerService() {
 
         /* The watch cycles back through days on the detail screens; answer with
          * that day's charts specifically rather than a full re-sync. */
-        val dayRequest = (data[MessageKeys.SERIES_DAY] as? PebbleDictionaryItem.UInt32)?.value
+        /* The watch writes this with dict_write_int32, so it arrives as a SIGNED
+         * tuple. Casting only to UInt32 silently dropped every day request, which
+         * is why past days never populated. */
+        val dayRequest = dictInt(data[MessageKeys.SERIES_DAY])
         if (dayRequest != null) {
-            val offset = dayRequest.toInt().coerceIn(0, 30)
-            Log.i(TAG, "SERIES_DAY request for $offset from $watch")
+            val offset = dayRequest.coerceIn(0, 30)
+            Log.i(
+                TAG,
+                "SERIES_DAY request for $offset from $watch " +
+                    "(item=${data[MessageKeys.SERIES_DAY]?.javaClass?.simpleName})",
+            )
             val series = repository.loadDaySeries(offset)
             cache.saveDayInfo(
                 "day $offset: ${series.steps.sum()} steps, " +
@@ -68,6 +75,17 @@ class HealthGlancePebbleService : BasePebbleListenerService() {
         Log.i(TAG, "STATS_REQ from $watch")
         sync.sync(listOf(watch))
         return ReceiveResult.Ack
+    }
+
+    /** Read a numeric tuple whatever width or signedness the watch sent. */
+    private fun dictInt(item: PebbleDictionaryItem?): Int? = when (item) {
+        is PebbleDictionaryItem.Int32 -> item.value.toInt()
+        is PebbleDictionaryItem.UInt32 -> item.value.toInt()
+        is PebbleDictionaryItem.Int16 -> item.value.toInt()
+        is PebbleDictionaryItem.UInt16 -> item.value.toInt()
+        is PebbleDictionaryItem.Int8 -> item.value.toInt()
+        is PebbleDictionaryItem.UInt8 -> item.value.toInt()
+        else -> null
     }
 
     override fun onAppClosed(watchappUUID: UUID, watch: WatchIdentifier) {

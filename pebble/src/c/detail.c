@@ -619,6 +619,8 @@ void detail_set_request_day(void (*fn)(int day)) { s_request_day = fn; }
 
 bool detail_day_pending(void) { return s_waiting_day >= 0 && s_waiting_day == s_day; }
 
+int detail_day(void) { return s_day; }
+
 /* Drop the charts we are leaving behind. Without this, cycling to a day with no
  * data kept showing the PREVIOUS day's chart under the new day's header, which is
  * worse than showing nothing: the numbers look real and are for the wrong day. */
