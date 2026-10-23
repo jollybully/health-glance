@@ -166,22 +166,45 @@ static void draw_steps(GContext *ctx) {
     return;
   }
   if (peak > 0) {
+    int sum = 0, active = 0;
+    for (int i = 0; i < SERIES_SLOTS; i++) {
+      sum += s_series[CARD_D_STEPS][i];
+      if (s_series[CARD_D_STEPS][i] > 0) active++;
+    }
+    const int avg = active > 0 ? (sum / active) : 0;
     if (past && s_day_totals_ok) {
       snprintf(a, sizeof a, "%d", s_day_totals[0]); /* the day's own total */
       cards_hero_text(ctx, a, HERO_Y);
-      label_left(ctx, "steps", GColorDarkGray, UNIT_Y);
     } else {
-      snprintf(a, sizeof a, "%d", peak * 100); /* series is steps/100 per hour */
+      /* today has no per-day total in the series, so show the peak hour rather
+       * than inventing one */
+      snprintf(a, sizeof a, "%d", peak * 100);
       cards_hero_text(ctx, a, HERO_Y);
-      label_left(ctx, "peak hour", GColorDarkGray, UNIT_Y);
     }
-    fill(ctx, GColorDarkGray, GRect(X_INSET, CHART_TOP + 8, BW, 1));
+    /* Say what the chart is. "steps by hour" over "0-23h" removes the guesswork. */
+    label_left(ctx, "steps by hour", GColorDarkGray, UNIT_Y);
+    label_right(ctx, "0-23h", GColorDarkGray, UNIT_Y);
+    /* A real average, drawn only when it is derived from this day's hours — the
+     * old line was decoration and implied a meaning it did not have. */
+    if (avg > 0 && avg < peak) {
+      int ay = BAR_Y - 2 - (avg * (BAR_Y - 2 - CHART_TOP)) / peak;
+      fill(ctx, GColorDarkGray, GRect(X_INSET, ay, BW, 1));
+    }
     for (int i = 0; i < SERIES_SLOTS; i++) {
       int h = (s_series[CARD_D_STEPS][i] * (BAR_Y - 2 - CHART_TOP)) / peak;
       bar(ctx, X_INSET + i * 8, 5, h, i == peak_hour ? GColorBlack : GColorJaegerGreen);
     }
-    snprintf(a, sizeof a, "%d-%d", peak_hour, (peak_hour + 1) % 24);
-    label_right(ctx, a, GColorDarkGray, UNIT_Y);
+    /* One short line: today gets the day's own totals, a past day gets its peak
+     * hour. Two facts in one 180px line truncates, which is what happened. */
+    if (past) {
+      snprintf(a, sizeof a, "peak %d at %d-%d", peak * 100, peak_hour, (peak_hour + 1) % 24);
+    } else {
+      snprintf(a, sizeof a, "%d.%d km · %d cal", g_stats.dist_m / 1000,
+               (g_stats.dist_m % 1000) / 100, g_stats.calories);
+    }
+    label_full(ctx, a, GColorBlack, META_Y);
+    cue(ctx);
+    return;
   } else {
     snprintf(a, sizeof a, "%d", g_stats.steps);
     cards_hero_text(ctx, a, HERO_Y);
@@ -189,19 +212,9 @@ static void draw_steps(GContext *ctx) {
     label_right(ctx, "no series", GColorDarkGray, UNIT_Y);
   }
 
-  if (past) {
-    /* today's distance and calories have no business on a past day's screen */
-    if (s_day_totals_ok) {
-      snprintf(a, sizeof a, "peak %d steps in one hour", peak * 100);
-    } else {
-      snprintf(a, sizeof a, "peak %d steps in one hour", peak * 100);
-    }
-    label_full(ctx, a, GColorBlack, META_Y);
-  } else {
-    snprintf(a, sizeof a, "%d.%d km · %d cal", g_stats.dist_m / 1000,
-             (g_stats.dist_m % 1000) / 100, g_stats.calories);
-    label_full(ctx, a, GColorBlack, META_Y);
-  }
+  snprintf(a, sizeof a, "%d.%d km · %d cal", g_stats.dist_m / 1000,
+           (g_stats.dist_m % 1000) / 100, g_stats.calories);
+  label_full(ctx, a, GColorBlack, META_Y);
   cue(ctx);
 }
 
